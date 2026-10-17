@@ -69,6 +69,7 @@ GUIDE = {
         'itself; read the project afterwards and check that one clip covers the whole film.',
     ],
     'references': [
+        "User message attachments are reference images by default. Use each name directly in media.references, media.first or media.last according to the user's words; if the intended role is unclear, ask one question. Text can be empty when a message has attachments.",
         'Tags are numbered per kind in reference order: <Picture 1>, <Picture 2>, <Video 1>, <Audio 1>. '
         'For keyframes the first frame is <Picture 1> and the last frame the next picture.',
         'Name subjects <Subject 1>, <Subject 2> in subject_definitions and reuse those labels in every section.',
@@ -211,6 +212,7 @@ GUIDE = {
 
 # How an agent is expected to work once a user has asked for something. Only what this version can honour.
 RULES = [
+    "User message attachments are reference images by default. Use each name directly in media.references, media.first or media.last according to the user's words; if the intended role is unclear, ask one question. Text can be empty when a message has attachments.",
     'Finish the job. When the user asks for a video, keep going until the finished video exists. Decide ordinary '
     'things yourself: how to split shots, how many takes, which take to keep. Tell the user what you decided in '
     'one or two sentences at the end, not along the way. Name every video you submit: label is a short name of what '
@@ -259,6 +261,7 @@ RULES = [
 
 
 RULES_ZH = [
+    '用户消息里的 attachments 默认当参考图。按用户的话把每张图的 name 直接用在 media.references、media.first 或 media.last；拿不准用途时问一句。有附件的消息 text 可以为空串。',
     '把任务做完。用户要求生成视频时，持续推进，直到成片生成。如何拆分镜头、拍几条、选哪一条等普通决定，'
     '由你自己做。最后用一两句话告诉用户你做了哪些决定，不要每做一步都请用户决定。'
     '提交的每条视频都起个名字：label 写拍的是什么，用用户的语言，2 到 8 个字，例如“清晨海边”。',

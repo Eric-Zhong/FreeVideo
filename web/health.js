@@ -344,12 +344,36 @@ function onScreen(element) {
 // canvas: inside the window, sized, and invisible. Look at what is on top of
 // its view switch; a dialog, menu, toast or this card only passes over it.
 const OVERLAYS = 'dialog, [role="dialog"], [role="menu"], .p-dialog-mask, .p-overlay-mask, .p-toast, .litecontextmenu, .fv-health';
-function covered(bar) {
-    const box = (bar.querySelector('.fv-view-switch') || bar).getBoundingClientRect();
-    const top = document.elementFromPoint(Math.min(innerWidth - 1, Math.max(0, box.left + box.width / 2)),
-        Math.min(innerHeight - 1, Math.max(0, box.top + box.height / 2)));
-    return !!top && !bar.contains(top) && !top.closest(OVERLAYS);
+// A layer hides the toolbar only if it paints over it. ComfyUI's dimming
+// backdrops and click-away layers (a dialog's shade, the help panel's) leave it
+// visible underneath, so they are not a fault.
+const SOLID = /^(canvas|video|img|iframe|object|embed|svg)$/i;
+function alphaOf(color) {
+    if (color === 'transparent') return 0;
+    const slash = color.match(/\/\s*([\d.]+)(%?)\s*\)/);
+    if (slash) return Number(slash[1]) / (slash[2] ? 100 : 1);
+    const legacy = color.match(/^rgba\(([^)]*)\)/);
+    const parts = legacy ? legacy[1].split(',') : [];
+    return parts.length === 4 ? Number(parts[3]) : 1;
 }
+function paints(element) {
+    const style = getComputedStyle(element);
+    if (style.visibility === 'hidden' || Number(style.opacity) === 0) return false;
+    return SOLID.test(element.tagName) || style.backgroundImage !== 'none'
+        || alphaOf(style.backgroundColor) * Number(style.opacity) >= 0.9;
+}
+function coveredBy(bar) {
+    const box = (bar.querySelector('.fv-view-switch') || bar).getBoundingClientRect();
+    const stack = document.elementsFromPoint(Math.min(innerWidth - 1, Math.max(0, box.left + box.width / 2)),
+        Math.min(innerHeight - 1, Math.max(0, box.top + box.height / 2)));
+    for (const top of stack) {
+        if (bar.contains(top) || top.closest(OVERLAYS)) return null;
+        if (paints(top)) return top;
+    }
+    return null;
+}
+const nameOf = element => `${element.tagName.toLowerCase()}${element.id ? `#${element.id}` : ''}`
+    + `${[...element.classList].slice(0, 4).map(name => `.${name}`).join('')} (z-index ${getComputedStyle(element).zIndex})`;
 
 // A video enlarged to full screen (the maximize button on a node's video, or
 // the player's own) hides the rest of the page until it is left again.
@@ -376,10 +400,12 @@ function workspaceProblem(app) {
         : {text: t('The creative workspace is open but cannot be seen on the page.', '创作面板已经打开，但页面上看不到。'), advice: 'reload'};
     const bar = document.querySelector('.fv-view-navigation');
     if (!bar) return {text: t('The FreeVideo toolbar that opens the creative workspace is missing from the page.', '页面上没有打开创作面板的 FreeVideo 工具栏。'), advice: 'reload'};
-    if (onScreen(bar) && !covered(bar)) return null;
+    const cover = onScreen(bar) ? coveredBy(bar) : null;
+    if (onScreen(bar) && !cover) return null;
     // Its own stylesheet places it above the canvas.
     return sheetLoaded('view_navigation.css')
-        ? {text: t('The FreeVideo toolbar that opens the creative workspace is hidden or covered by other page elements.', '打开创作面板的 FreeVideo 工具栏被页面上的其他元素隐藏或遮挡了。'), advice: 'plugin'}
+        ? {text: t('The FreeVideo toolbar that opens the creative workspace is hidden or covered by other page elements.', '打开创作面板的 FreeVideo 工具栏被页面上的其他元素隐藏或遮挡了。'), advice: 'plugin',
+            ...(cover && {cover: nameOf(cover)})}
         : {text: t('The FreeVideo toolbar that opens the creative workspace cannot be seen: its stylesheet view_navigation.css did not load.',
             '看不到打开创作面板的 FreeVideo 工具栏：样式文件 view_navigation.css 没有加载。'), advice: 'reload', sheet: 'view_navigation.css'};
 }
@@ -451,7 +477,7 @@ function details(problems) {
         `ComfyUI frontend: ${window.__COMFYUI_FRONTEND_VERSION__ || 'unknown'}`,
         `FreeVideo UI: ${JSON.stringify(window.FreeVideoUI || {})}`,
         `Automatic reload: ${retried ? new Date(Number(retryRecord.at)).toISOString() : retryRecord ? 'not needed' : 'unavailable (no session storage)'}`,
-        '', 'Problems:', ...problems.map(p => `- ${p.text}`),
+        '', 'Problems:', ...problems.flatMap(p => [`- ${p.text}`, ...(p.cover ? [`  covered by: ${p.cover}`] : [])]),
         ...(checks.length ? ['', 'Load check:', ...checks.map(row => `- ${row}`)] : []),
         ...(cache.length ? ['', 'Browser cache:', ...cache.map(row => `- ${row}`)] : []),
         ...(before.length ? ['', 'Browser cache before the automatic reload:', ...before.map(row => `- ${row}`)] : []),

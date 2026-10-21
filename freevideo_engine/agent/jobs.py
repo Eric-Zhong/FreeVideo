@@ -797,6 +797,7 @@ class Jobs:
                 item = substitute(item, names)
                 try:
                     normalized = specs.normalize(item, port=_Warmed(self.port))
+                    self.resolve_image_cast(normalized)
                 except specs.SpecError as error:
                     problems.extend(schema.prefix_diagnostic(e, prefix) for e in error.errors)
                     continue
@@ -1853,6 +1854,30 @@ class Jobs:
         return failure
 
     # Local image generation ----------------------------------------------------------------------------
+    def resolve_image_cast(self, spec):
+        """Pin character card pictures before saving the job, including across restarts/replays."""
+        if spec['kind'] != 'image':
+            return
+        for i, person in enumerate(spec.get('people', [])):
+            identity = person.get('cast')
+            if identity is None:
+                continue
+            path = '/people/%d/cast' % i
+            try:
+                card = self.cast.get(identity)
+            except JobError as error:
+                if error.code != 'not_found':
+                    raise
+                specs.fail(path, 'an existing character card ID from GET /freevideo/agent/v1/cast')
+            if card['kind'] != 'character':
+                specs.fail(path, 'a character card, rather than a setting card')
+            picture = next((row for row in card['images'] if row['label'] == 'front'), None)
+            if picture is None:
+                specs.fail(path, 'a character card with a front picture; add or generate one first')
+            person.pop('cast')
+            person['image'] = picture['media']['file']
+            person.setdefault('name', card['name'][:40])
+
     def wait_image(self, row, code, *, waiting_for=None):
         if code not in IMAGE_WAIT_ERRORS:
             return False

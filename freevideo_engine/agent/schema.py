@@ -239,11 +239,11 @@ def image(*, local=False):
                               feet=number(0, 1), facing=enum(('left', 'right')),
                               framing=enum(('full', 'half'), default='full')),
                          oneOf=[{'required': ['image']}, {'required': ['cast']}]), 1, 3,
-            description='First frame with people near the places you say; faces may differ. Give image (an input '
+            description='First frame with people near the places you say; faces may not match the pictures exactly. Give image (an input '
             'file) or cast (a character card ID; its front picture is used). From 0 to 1: x is the '
-            "centre across the width (default 0.5), height the visible figure over the frame height (0.62; head to waist "
-            'for half), feet the figure bottom from the top (default max(0.9, height)). facing is the screen left/right; '
-            'framing is full or half. Width and height: multiples of 32. The prompt or scene_image gives the scene. Not with images.'),
+            "centre across the width (default 0.5), height the visible figure's share of the frame height (0.62; head to waist "
+            "for half), feet where the figure's lower edge sits, from the top (default: the larger of 0.9 and height). facing is left or right on screen; "
+            'Width and height: multiples of 32. Not with images.'),
         scene_image=FILE,
         **common()),
         ('kind',), allOf=[{'if': {'not': {'required': ['scene_image']}}, 'then': {'required': ['prompt']}},

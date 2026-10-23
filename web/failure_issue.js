@@ -23,13 +23,20 @@ export function failureStage(report) {
 }
 
 const TAIL = 1500, TAIL_HEAD = 500;
+// The engine's one-line summary of a Mac run (machine, size, length, settings, retry). It travels as its
+// own field, so a long traceback cannot cut it and it does not take room from the tail.
+const RUN_LINE = /^Run: .*(?:\r?\n|$)/m;
 
 // The engine's failure text, not ComfyUI's traceback after it: details end with
 // the bridge's own frames. The error and stage lead that text and the child
 // log's error ends it, so a long one gives up its middle.
-function cause(report) {
+function failureText(report) {
     const message = String(report?.message || '');
-    const text = message.includes('\n') ? message : String(report?.details || '');
+    return message.includes('\n') ? message : String(report?.details || '');
+}
+
+function cause(report) {
+    const text = failureText(report).replace(RUN_LINE, '');
     if (text.length <= TAIL) return text;
     return text.slice(0, TAIL_HEAD) + '\n...\n' + text.slice(-(TAIL - TAIL_HEAD - 5));
 }
@@ -44,9 +51,10 @@ export function failureIssue(report, kind, {lora = false, t = en => en} = {}) {
         `Stage: ${stage ? stage[0] : report?.stage || 'unknown'}`, `Error: ${first.trim().slice(0, 300)}`,
         `Kind: ${kind || 'unknown'}`].join('\n');
     const types = (report?.nodes || []).map(node => node.type).filter(Boolean);
+    const run = RUN_LINE.exec(failureText(report))?.[0].trim().slice(5, 505);
     const summary = JSON.stringify({kind: kind || 'unknown', stage: report?.stage, exception_type: report?.exception_type,
         known_error: report?.known_error, nodes: types, settings: report?.settings, progress: report?.progress,
-        tail: cause(report)});
+        run, tail: cause(report)});
     const title = lora ? t('[Feedback] LoRA compatibility misjudged', '[Feedback] LoRA 兼容判断有误')
         : t('[Feedback] Generation did not finish', '[Feedback] 生成未完成') + (stage ? t(`: ${stage[0]}`, `：${stage[1]}`) : '');
     return {title, text, summary};

@@ -39,11 +39,15 @@ def read_receipt(receipt):
     return observed
 
 
+METAL_FAILURE = '[METAL] Command buffer execution failed'
+
+
 def memory_exhausted(stage, observed):
-    """A sampling pass that stopped because MPS reached its allocator limit."""
+    """A sampling pass that stopped because MPS reached its allocator limit or Metal failed a command buffer."""
     # The physical RAM floor protects the whole machine, and the outer guard also ends the request.
+    message = str(observed.get('error_message', ''))
     return (stage in ('first-pass', 'refinement') and observed.get('success') is False
-            and 'MPS backend out of memory' in str(observed.get('error_message', '')))
+            and ('MPS backend out of memory' in message or METAL_FAILURE in message))
 
 
 def joined_admission(engine, value):
@@ -195,7 +199,8 @@ def run(value):
                         if retry or not memory_exhausted(stage, failed):
                             raise
                         # Unified memory taken by other applications can leave a
-                        # sampling pass short of its plan. Retry it once in a fresh
+                        # sampling pass short of its plan, and Metal can fail a command
+                        # buffer without naming memory. Retry it once in a fresh
                         # process with the smallest grouped-projection partitions.
                         # Keeping a saved first pass avoids changing its latents
                         # with those new partitions.
@@ -210,12 +215,14 @@ def run(value):
                                 and len(rows[0]['step_seconds']) == sampling['base_steps']):
                             retain_joined_progress(result, failed)
                             retained_joined = failed
+                        metal = METAL_FAILURE in str(failed.get('error_message', ''))
                         result.setdefault('memory_retries', []).append(dict(phase=stage,
+                            kind='metal_command_buffer' if metal else 'unified_memory',
                             error_type=failed.get('error_type'), error_message=failed.get('error_message'),
                             compute=failed.get('compute'), process_seconds=time.monotonic() - tick))
                         print(json.dumps(dict(event='resource_retry', retry=dict(
                             failed_phase='refinement' if stage == 'refinement' or retained_joined else 'sampling',
-                            kind='unified_memory', attempt=2, max_attempts=2,
+                            kind='metal_command_buffer' if metal else 'unified_memory', attempt=2, max_attempts=2,
                             reuse_first_pass=stage == 'refinement' or bool(retained_joined)))), flush=True)
                         if retained_joined:
                             break

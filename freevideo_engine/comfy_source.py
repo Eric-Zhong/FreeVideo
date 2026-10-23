@@ -52,8 +52,7 @@ def download(target, *, plan, env, run):
     if target.exists():
         return network.clone(target, spec['url'], spec['commit'], network=plan, env=env, run=run)
     stage = target.with_name(target.name + '.freevideo-download')
-    # A finished checkout survives cancellation before publication. Git fetch's
-    # own incomplete attempts are retained beside this directory by network.clone.
+    # A finished checkout survives cancellation before publication.
     network.clone(stage, spec['url'], spec['commit'], network=plan, env=env, run=run)
     if not all((stage / name).is_file() for name in ('main.py', 'folder_paths.py', 'requirements.txt')) or not (stage / 'comfy_api/latest').is_dir():
         raise ValueError('The downloaded ComfyUI application is incomplete; files retained at ' + str(stage))

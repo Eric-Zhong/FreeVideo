@@ -1399,6 +1399,12 @@ def clone(target, url, commit, *, sparse=None, run=None, network=None, env=None)
     io_path(target.parent).mkdir(parents=True, exist_ok=True)
     candidates = urls(dict(network, sources=dict(network.get('sources', {}), github=network.get('sources', {}).get('git', [{'id': 'official'}]))), 'github', url, env)
     configured_env = env
+    # A depth-1 fetch cannot continue an earlier attempt, so what a past run left beside the target is only waste.
+    for stale in io_path(target.parent).glob(target.name + '.partial-*'):
+        try:
+            remove_tree(stale)
+        except OSError:
+            pass  # Held by another program; the download goes on and a later run tries again.
     for name, endpoint, route in [(name, endpoint, route) for name, endpoint in candidates
                                  for route in route_order(network, 'git', name, configured_env)]:
         env = route_environment(network, 'git', name, configured_env, route)
@@ -1446,6 +1452,12 @@ def clone(target, url, commit, *, sparse=None, run=None, network=None, env=None)
             source_health(network, 'git', name, False)
             event(network, category='git', source=name, route=route, file=target.name, action='fallback', reason='network-fetch-failed')
         finally:
-            if scratch and scratch.exists():
-                remove_tree(scratch)
-    raise RuntimeError('All Git sources failed. Check your network or connection mode in Downloads. Incomplete checkouts retained beside ' + str(target))
+            # Best effort: a file still held by antivirus or git.exe must not replace the
+            # error being handled or stop the fallback to the next source.
+            for leftover in (scratch, io_path(temporary)):
+                try:
+                    if leftover and leftover.exists():
+                        remove_tree(leftover)
+                except OSError:
+                    pass
+    raise RuntimeError('All Git sources failed. Check your network or connection mode in Downloads.')

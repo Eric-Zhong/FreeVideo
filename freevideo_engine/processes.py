@@ -163,6 +163,17 @@ def popen(command, *, pass_fds=(), supervise=False, **kwargs):
     return subprocess.Popen(command, pass_fds=pass_fds, **kwargs)
 
 
+def gone(process):
+    """The worker process no longer exists, checked directly rather than by a signal."""
+    try:
+        if hasattr(process, 'created'):
+            from .resident_process import alive
+            return not alive(process.pid, process.created)
+        return process.poll() is not None
+    except BaseException:
+        return False
+
+
 def stop(process, grace=10):
     if hasattr(process, 'stop_request'):
         return process.stop_request(grace=grace)

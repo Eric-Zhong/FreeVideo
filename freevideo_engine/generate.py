@@ -104,8 +104,11 @@ def child(command, env, descriptor, log, *, ram_budget_bytes=None, gpu=None, on_
             except BaseException as stop_error:
                 # A stop timeout is not a controlled timeout. The worker may
                 # still own CUDA; never convert this into an ordinary retry.
-                error.worker_stop_confirmed = False
-                error.worker_stop_error = repr(stop_error)
+                # A worker observed gone afterwards owns nothing, whatever the
+                # signal call reported while it was exiting.
+                if not processes.gone(process):
+                    error.worker_stop_confirmed = False
+                    error.worker_stop_error = repr(stop_error)
             error.telemetry = telemetry
             raise
         finally:

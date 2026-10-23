@@ -41,6 +41,32 @@ def commit_exhausted(error):
     return found(error)
 
 
+# A CUDA error that may leave the device itself unusable; never retried.
+DEVICE_STATE_ERRORS = ('cuda error: unknown error', 'device is lost', 'device lost', 'gpu is lost',
+    'illegal memory access', 'device-side assert', 'unspecified launch failure', 'driver shutting down',
+    'device has been removed', 'cuda error: launch timeout', 'the launch timed out',
+    'cudaerrorillegaladdress', 'cudaerrorunknown')
+
+
+def second_pass_resumable(error, failure, metrics, attempts):
+    """A rejected, non-sticky CUDA call in the second pass, first pass retained.
+
+    The retry is one fresh process that loads the retained first pass and
+    repeats only the second pass with the same placement. A sticky device
+    error, an unconfirmed worker stop, a failure after sampling finished and
+    any earlier resumed attempt stay final; out-of-memory keeps its own path.
+    """
+    from .decode_resume import completed_sampling, refine_checkpoint_complete
+    if failure.get('kind') != 'code_error' or not isinstance(metrics, dict):
+        return False
+    recorded = str(metrics.get('error', '')).lower()
+    if not (cuda_runtime_error(error) or 'cuda error' in recorded) or 'out of memory' in recorded:
+        return False
+    if not refine_checkpoint_complete(metrics) or completed_sampling(metrics):
+        return False
+    return not any(row.get('decision', {}).get('second_pass_resume') for row in attempts)
+
+
 def classify_failure(error, metrics=None):
     """Only positively identified resource failures are retriable.
 
@@ -55,10 +81,7 @@ def classify_failure(error, metrics=None):
     attached = getattr(error, 'cleanup_errors', [])
     cleanup += attached if isinstance(attached, list) else [attached]
     text = '\n'.join([str(error), str(metrics.get('error', ''))] + [str(item) for item in cleanup]).lower()
-    if any(part in text for part in ('cuda error: unknown error', 'device is lost', 'device lost',
-            'gpu is lost', 'illegal memory access', 'device-side assert', 'unspecified launch failure',
-            'driver shutting down', 'device has been removed', 'cuda error: launch timeout',
-            'the launch timed out', 'cudaerrorillegaladdress', 'cudaerrorunknown')) or details.get('kind') == 'cuda_error':
+    if any(part in text for part in DEVICE_STATE_ERRORS) or details.get('kind') == 'cuda_error':
         kind, outcome, retry = 'cuda_error', 'discarded', False
     elif getattr(error, 'worker_stop_confirmed', None) is False:
         kind, outcome, retry = 'worker_stop_unconfirmed', 'discarded', False
@@ -628,17 +651,25 @@ def execute_attempts(history, identity, profile, canvas, launch, *,
             history.finish(attempt, failure['outcome'], details=details)
             row.update(state=failure['outcome'], failure=failure)
             persist()
-            if not automatic or not failure['retryable'] or index == max_retries:
+            resume = (automatic and index < max_retries and not failure['retryable']
+                      and second_pass_resumable(error, failure, metrics, report['resource_attempts']))
+            if not automatic or not (failure['retryable'] or resume) or index == max_retries:
                 raise
             previous_ram_retries = sum(r.get('failure', {}).get('kind') == 'ram_pressure'
                                        for r in report['resource_attempts'][:-1])
             previous_gpu_retries = sum(r.get('failure', {}).get('kind') == 'gpu_oom'
                                        for r in report['resource_attempts'][:-1])
             from .decode_resume import completed_sampling
-            updated, decision = next_placement(current, failure, (metrics or {}).get('phase', 'sample'), canvas,
-                                               previous_ram_retries=previous_ram_retries,
-                                               previous_gpu_retries=previous_gpu_retries,
-                                               sampling_complete=completed_sampling(metrics))
+            if resume:
+                updated, decision = copy.deepcopy(current), dict(
+                    reason='A CUDA call was rejected in the second pass; repeat only the second pass '
+                           'from the retained first pass with the same placement.',
+                    numerical_class='unchanged', second_pass_resume=True)
+            else:
+                updated, decision = next_placement(current, failure, (metrics or {}).get('phase', 'sample'), canvas,
+                                                   previous_ram_retries=previous_ram_retries,
+                                                   previous_gpu_retries=previous_gpu_retries,
+                                                   sampling_complete=completed_sampling(metrics))
             if updated is None:
                 row['recovery_note'] = decision['reason']
                 persist()

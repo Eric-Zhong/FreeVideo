@@ -658,8 +658,10 @@ export function openStudio(node, {extendFrom = null} = {}) {
     tools.append(feedbackButton(t), button(t('Settings', '设置'), openSetup, 'fv-quiet'));
     // The Agent's page is the fourth tab, shown where the Agent interface is on; the guide's last step circles it.
     agentTabReady(agentInterfaceState(api), () => agentInterfaceState(api));
-    const navigation = viewSwitch('studio', () => {}, () => showNodes(node, dialog),
-        () => openEditorView(node, {studio: dialog}), () => openAutopilot(node, {studio: dialog}));
+    // The length hint links to the same two views, through the same actions.
+    const toEditor = () => openEditorView(node, {studio: dialog}), toAutopilot = () => openAutopilot(node, {studio: dialog});
+    const navigation = viewSwitch('studio', () => {}, () => showNodes(node, dialog), toEditor, toAutopilot);
+    const autopilotTab = navigation.querySelector('[data-view="autopilot"]');
     // The guide starts after the tab settles: it fixes its steps from the anchors present at that moment.
     const agentDiscovery = navigation.ready;
     header.append(brand, navigation, tools);
@@ -959,8 +961,12 @@ export function openStudio(node, {extendFrom = null} = {}) {
     }
     advanced.append(custom);
     lengthControl = createStudioLength({api, node, seconds, advanced, fields, t, field,
-        setSeconds: seconds => set(node, 'seconds', seconds), onChange: () => { if (runButtonReady) { updateRunButton(); showEffortEstimate(); updateDuration(); } }});
+        setSeconds: seconds => set(node, 'seconds', seconds), onChange: () => { if (runButtonReady) { updateRunButton(); showEffortEstimate(); updateDuration(); } },
+        onEditor: toEditor, onAutopilot: toAutopilot, autopilot: !autopilotTab.hidden});
     cleanup.push(() => lengthControl.dispose());
+    // The tab settles once the Agent interface has answered, and again if a failed check is retried.
+    const autopilotWatch = new MutationObserver(() => { lengthControl.autopilot = !autopilotTab.hidden; });
+    autopilotWatch.observe(autopilotTab, {attributes: true, attributeFilter: ['hidden']}); cleanup.push(() => autopilotWatch.disconnect());
     // Under the length row, only where a video is continued and the node can take it.
     const firstFrame = firstFrameRow(t, 'fv-first-frame');
     firstFrame.row.hidden = true; fields.after(firstFrame.row);

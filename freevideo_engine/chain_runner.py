@@ -22,9 +22,9 @@ class ChainTooLong(ValueError):
     code = 'chain_too_long'
 
     def __init__(self, parts, limit):
-        super().__init__('This video can have up to %d parts. Make it shorter.' % limit)
+        super().__init__('One continuous shot can have up to %d parts. Make it shorter.' % limit)
         self.parts, self.limit = parts, limit
-        self.message_zh = '这条视频最多 %d 段，请缩短一些。' % limit
+        self.message_zh = '一个连续镜头最多 %d 段，请缩短。' % limit
 
 
 class ChainPartTooShort(ValueError):

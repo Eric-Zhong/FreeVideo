@@ -31,6 +31,10 @@
 .fv-prompt-guide a:hover,.fv-studio .fv-prompt-guide a:hover{background:transparent;color:var(--fv-ink)}
 .fv-prompt-guide a:focus-visible{outline:2px solid var(--fv-accent);outline-offset:3px}
 .fv-studio .fv-fields{display:grid;grid-template-columns:1fr 1fr;gap:12px}.fv-studio .fv-field{display:block;min-width:0}.fv-studio .fv-field>span{display:block;font-size:var(--fv-micro);color:var(--fv-muted);margin:0 0 7px}
+/* Links inside the length hint and the length note read as words; a label never breaks across lines. */
+.fv-studio .fv-length-link{display:inline;min-height:0;padding:0;border:0;border-radius:0;background:transparent;color:var(--fv-accent);font:inherit;vertical-align:baseline;text-decoration:underline;text-underline-offset:3px;white-space:nowrap}
+.fv-studio .fv-length-link:hover{background:transparent;color:var(--fv-ink)}
+.fv-studio .fv-length-link:focus-visible{outline:2px solid var(--fv-accent);outline-offset:3px}
 .fv-studio .fv-resolution-select{position:relative;min-width:0}
 .fv-studio .fv-resolution-select select{appearance:none;-webkit-appearance:none;color:transparent;padding-right:36px}
 .fv-studio .fv-resolution-select option{color:var(--fv-ink)}

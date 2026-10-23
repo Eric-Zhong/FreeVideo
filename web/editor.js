@@ -62,7 +62,7 @@ export function editorErrorText(value, t = en => en) {
         return t(`${stage}: not enough GPU memory.`, `${stage}时显存不足。`);
     const known = {
         chain_part_too_short: t('Each continued part needs at least 10 seconds.', '接续的每段至少 10 秒。'),
-        chain_too_long: t('A video can have up to 5 parts.', '一条视频最多 5 段。'),
+        chain_too_long: t('One continuous shot can have up to 8 parts.', '一个连续镜头最多 8 段。'),
         too_long: t('This part is longer than the maximum length. Shorten it and try again.', '这一段超过了最长时长，请缩短后再试。'),
         missing_node: t('Generation is not ready. Restart FreeVideo.', '生成功能没有就绪，请重新启动 FreeVideo。'),
         chain_missing: t('Generation could not start. Choose "Generate" again.', '生成没能开始，请再点“生成”。'),
@@ -301,7 +301,7 @@ export function openEditor({api, app, from = null, panel = {}, components: given
         if (code === 'unsupported') { genbar?.update(null); return; }
         if (['chain_too_long', 'chain_part_too_short'].includes(code)) {
             const [en, zh] = (value.said || []).map(text => typeof text === 'string' && text ? text.slice(0, 200) : null);
-            const text = code === 'chain_too_long' ? t(en || 'This video can have up to 5 parts. Make it shorter.', zh || '这条视频最多 5 段，请缩短一些。')
+            const text = code === 'chain_too_long' ? t(en || 'One continuous shot can have up to 8 parts. Make it shorter.', zh || '一个连续镜头最多 8 段，请缩短。')
                 : t(en || 'Each continued part must be at least 10 seconds. Make it longer.', zh || '接着生成的每一段至少 10 秒，请加长一些。');
             out(text); return {ok: false, reason: code, say: text};
         }

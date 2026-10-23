@@ -25,8 +25,10 @@ export async function readLengthCapability(api, context, signal, onReply = () =>
     } catch { return null; }
 }
 
+// onEditor and onAutopilot are the creation panel's own view-switch actions; autopilot says whether that tab shows.
 export function createStudioLength({api, node, seconds, advanced, fields, t, field, setSeconds,
-    onChange = () => {}, capability = readLengthCapability, delay = 220, capabilityTimeout = 10000}) {
+    onChange = () => {}, capability = readLengthCapability, delay = 220, capabilityTimeout = 10000,
+    onEditor = () => {}, onAutopilot = () => {}, autopilot = false}) {
     const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text) e.textContent = text; return e; };
     const controls = el('div', 'fv-length-controls'); controls.style.marginTop = '14px';
     const single = el('input'); single.type = 'checkbox'; single.dataset.fvLength = 'single';
@@ -44,11 +46,27 @@ export function createStudioLength({api, node, seconds, advanced, fields, t, fie
     // The limits are stated before anything is typed, not only when a request is refused.
     const NO_PARTS = t('This device cannot make longer videos in parts.', '此设备不支持分段生成长视频。');
     let noParts = false;
-    const hint = el('p', 'fv-muted fv-length-hint', t('Longer videos are made in parts automatically, up to 5 parts.', '较长的视频会自动分段，最多 5 段。'));
+    // A storyboard goes to the same views as the tabs above; Autopilot is named only while its tab shows.
+    let autopilotShown = Boolean(autopilot);
+    const viewLink = (label, action) => { const link = el('button', 'fv-length-link', label); link.type = 'button'; link.onclick = action; return link; };
+    function storyboard() {
+        const parts = [t('For a storyboard, use ', '有分镜剧本时，请用'), viewLink(t('Edit', '剪辑视图'), onEditor)];
+        if (autopilotShown) {
+            const link = viewLink(t('Autopilot', 'AI 全自动'), onAutopilot); link.setAttribute('translate', 'no');
+            parts.push(t(' or ', '或'), link);
+        }
+        return [...parts, t('.', '。')];
+    }
+    const storyboardText = () => storyboard().map(part => typeof part === 'string' ? part : part.textContent).join('');
+    const TOO_LONG = () => t('This shot is too long. Choose a shorter duration. ', '这个镜头太长，请缩短时长。');
+    const hint = el('p', 'fv-muted fv-length-hint');
+    const writeHint = () => noParts ? hint.textContent = NO_PARTS
+        : hint.replaceChildren(t('Each run makes one continuous shot, split into up to 8 parts when longer. ', '每次生成一个连续镜头，较长时自动分段，最多 8 段。'), ...storyboard());
+    writeHint();
     fields.after(hint);
     let limits = null, planLimits = null, contextKey = '', revision = 0, timer = null, request = null, capabilityRequest = null, capabilityRevision = 0;
     let capabilityState = 'idle', waiting = false, waitingTimer = null, timeoutTimer = null, submitted = false;
-    let plan = null, error = null, absent = false, disposed = false, pending = null, edited = false, blockEdited = false;
+    let plan = null, error = null, absent = false, disposed = false, pending = null, edited = false, blockEdited = false, plannedSeconds = null;
     const remember = (key, value) => { node.properties ||= {}; node.properties[key] = value; node.graph?.change(); node.setDirtyCanvas?.(true, true); };
     const total = () => Number(seconds.value);
     const effectiveSingle = () => node.properties?.[LENGTH_PROPERTIES.single] === true && total() <= (planLimits?.singleMaximum ?? 15);
@@ -82,7 +100,8 @@ export function createStudioLength({api, node, seconds, advanced, fields, t, fie
         // The same sentence is the problem note once a length needs parts: say it once.
         hint.hidden = absent || (noParts && Boolean(error));
         note.hidden = absent || !error;
-        note.textContent = error ? errorMessage(error) : '';
+        if (error === 'too_long') note.replaceChildren(TOO_LONG(), ...storyboard());
+        else note.textContent = error ? errorMessage(error) : '';
         if (error === 'other') note.append(issueButton(t, () => ({where: ['Video length planning', '视频分段规划'], message: errorMessage('other')})));
         note.style.margin = noParts && error === 'continuation_unavailable' ? '12px 0' : ''; // as spaced as the line it replaces
     }
@@ -90,11 +109,11 @@ export function createStudioLength({api, node, seconds, advanced, fields, t, fie
         return {single_unavailable: t('This length is beyond a single run.', '这个长度超出了单次能生成的范围。'),
             continuation_unavailable: noParts ? NO_PARTS
                 : t('Choose a smaller picture size to make a longer video.', '如需生成更长的视频，请选择更小的画面大小。'),
-            too_long: t('This video is too long. Choose a shorter duration.', '这条视频太长，请缩短时长。'),
+            too_long: TOO_LONG() + storyboardText(),
             other: t('Could not plan this video. Try again.', '暂时无法安排这条视频的分段，请重试。')}[kind];
     }
     function invalidate() {
-        revision++; plan = null; error = null; clearTimeout(timer); timer = null; request?.abort(); request = null; pending = null;
+        revision++; plan = null; error = null; clearTimeout(timer); timer = null; request?.abort(); request = null; pending = null; plannedSeconds = total();
         paint(); onChange();
     }
     async function calculate(version = revision) {
@@ -132,13 +151,16 @@ export function createStudioLength({api, node, seconds, advanced, fields, t, fie
         const value = total() > 30 ? Math.round(total()) : total(); seconds.value = value;
         if (value > 60) remember(LENGTH_PROPERTIES.seconds, value);
         else if (node.properties && Object.hasOwn(node.properties, LENGTH_PROPERTIES.seconds)) { delete node.properties[LENGTH_PROPERTIES.seconds]; node.graph?.change(); }
-        setSeconds(Math.min(60, value)); invalidate(); schedule(); return true;
+        setSeconds(Math.min(60, value));
+        // Leaving the field with the length already planned keeps that plan and its note, so a link in the note can be pressed.
+        if (value !== plannedSeconds || error === 'other') { invalidate(); schedule(); }
+        return true;
     }
     paint();
     // Devices that cannot continue a video say so up front. An unreadable answer keeps the general line.
     Promise.resolve().then(() => api.fetchApi('/freevideo/chains')).then(reply => reply?.ok ? reply.json() : null).then(value => {
         if (disposed || value?.continuation !== false) return;
-        noParts = true; hint.textContent = NO_PARTS; invalidate(); schedule();
+        noParts = true; writeHint(); invalidate(); schedule();
     }).catch(() => {});
     return {
         commit, options, get plan() { return plan; }, get absent() { return absent; },
@@ -148,6 +170,8 @@ export function createStudioLength({api, node, seconds, advanced, fields, t, fie
         get capabilityState() { return capabilityState; }, get estimating() { return waiting; },
         get blocked() { return !absent && Boolean(error); }, get message() { return error ? errorMessage(error) : ''; },
         fallback() { absent = true; invalidate(); },
+        // Follows the Autopilot tab when its state settles after the panel opened.
+        set autopilot(shown) { if (disposed || Boolean(shown) === autopilotShown) return; autopilotShown = Boolean(shown); writeHint(); paint(); onChange(); },
         freeze() { submitted = true; },
         async ready() {
             while (!disposed) {

@@ -173,10 +173,10 @@ export function mediaURL(api, value) {
     return api.apiURL?.(path) || path;
 }
 
-export function createEditorStore(api, {t = en => en, notify = () => {}, onGenerationReady = () => {}, clock = clockDefault, pollMs = 2000, standIn: injected = null} = {}) {
+export function createEditorStore(api, {t = en => en, notify = () => {}, onGenerationReady = () => {}, onGenerationChecking = () => {}, clock = clockDefault, pollMs = 2000, standIn: injected = null} = {}) {
     const sources = new Map(), sourceReads = new Map(), watchers = new Set(), pollers = new Set(), once = new Set();
     let recovered = null, capabilityPoll = null;
-    let generationAvailable = false, generationGone = false, generationProbe = null, generationRetry = null, generationAttempts = 0;
+    let generationAvailable = false, generationGone = false, generationProbe = null, generationRetry = null, generationAttempts = 0, generationStalled = false, generationAsking = false;
     let disposed = false; const uploads = new Set();
     const session = holdSession();
     let activeProject = null, sessionTimer = null, sessionWrites = Promise.resolve();
@@ -233,7 +233,7 @@ export function createEditorStore(api, {t = en => en, notify = () => {}, onGener
     }
     function askGenerationAgain() {
         const delay = [2000, 5000, 15000, 30000][generationAttempts++];
-        if (delay === undefined) return;
+        if (delay === undefined) { generationStalled = true; return; }
         const timer = clock.setTimeout(() => { retry.dispose(); store.generationReady(); }, delay);
         const retry = generationRetry = {dispose() { clock.clearTimeout(timer); pollers.delete(retry); if (generationRetry === retry) generationRetry = null; }};
         pollers.add(retry);
@@ -257,6 +257,15 @@ export function createEditorStore(api, {t = en => en, notify = () => {}, onGener
         get generationAvailable() { return standIn ? standIn.generationAvailable ?? true : generationAvailable; },
         // The server said for certain it cannot generate (not just a missed answer that is asked again).
         get generationGone() { return !standIn && generationGone; },
+        // Every automatic check went unanswered: the page offers to check again. It stays so until an answer comes.
+        get generationStalled() { return !standIn && generationStalled && !generationAvailable && !generationGone; },
+        get generationChecking() { return !standIn && generationAsking; },
+        // Checks now and starts the automatic checks over; the page is told of every answer as before.
+        retryGeneration() {
+            if (standIn || generationAvailable || generationGone || disposed) return Promise.resolve(generationAvailable);
+            generationRetry?.dispose(); generationAttempts = 0;
+            return store.generationReady();
+        },
         generationReady() {
             if (standIn) return standIn.generationReady
                 ? Promise.resolve(standIn.generationReady(ready => { if (!disposed) onGenerationReady(ready); }))
@@ -273,14 +282,14 @@ export function createEditorStore(api, {t = en => en, notify = () => {}, onGener
                     controller.abort(); resolve(null);
                 }, 5000); });
                 const probe = {dispose() { clock.clearTimeout(timer); controller.abort(); finish(null); pollers.delete(probe); }};
-                pollers.add(probe);
+                pollers.add(probe); generationAsking = true; if (!disposed) onGenerationChecking();
                 try {
                     // true: present; false: no such route; null: no usable answer.
                     answer = await Promise.race([Promise.resolve().then(() => request('/freevideo/chains', {signal: controller.signal}))
                         .then(async response => response.status === 404 ? false
                             : response.ok && Array.isArray((await response.json())?.chains) ? true : null)
                         .catch(() => null), timeout]);
-                } finally { probe.dispose(); generationProbe = null; }
+                } finally { probe.dispose(); generationProbe = null; generationAsking = false; }
                 if (disposed || generationGone) return false;
                 if (answer === false) generationAbsent();
                 else if (answer) { generationAvailable = true; onGenerationReady(true); }

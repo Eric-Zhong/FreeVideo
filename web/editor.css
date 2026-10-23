@@ -78,6 +78,9 @@
 .fv-ed-gen-note[hidden]{display:none}
 .fv-ed-gen-note:has(.fv-issue-button){white-space:normal;overflow:visible}
 .fv-ed-gen-note .fv-issue-button,.fv-ed-library-message .fv-issue-button{margin-left:8px}
+.fv-editor .fv-ed-gen-retry{height:auto;padding:0;border:0;background:none;color:inherit;font:inherit;cursor:pointer}
+.fv-editor .fv-ed-gen-retry:hover:not(:disabled){text-decoration:underline}
+.fv-editor .fv-ed-gen-retry:disabled{color:var(--fv-muted);cursor:default}
 .fv-ed-genbar .fv-request-assets{order:-2;flex:1 1 100%;min-width:0;font-size:12px;line-height:1.5}
 .fv-ed-genbar .fv-request-assets[hidden]{display:none}
 .fv-editor:has(.fv-ed-gen-failure:not([hidden])){--fv-ed-generation-row:max-content}

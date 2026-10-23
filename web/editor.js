@@ -317,10 +317,11 @@ export function openEditor({api, app, from = null, panel = {}, components: given
         const text = step === 'generate' ? editorErrorText(value, t) : step === 'export' ? exportErrorText(value, t) : t('Could not complete. Try again.', '没有完成，请重试');
         out(text, step === 'export' ? EXPORT_ISSUE : EDITOR_ISSUE, failureKind(site, value)); return {ok: false, reason: code, say: text};
     }
-    const store = createEditorStore(api, {t, notify, standIn: given?.generationStandIn, onGenerationReady: ready => {
+    const store = createEditorStore(api, {t, notify, standIn: given?.generationStandIn, onGenerationChecking: () => { if (!disposed) settleService(); }, onGenerationReady: ready => {
         if (disposed) return;
-        generationAsked = true; genHost.hidden = !ready; element.dataset.generationReady = String(ready);
-        settleGenbar(); if (ready) { offerInitial?.(); extendEntry?.(); void startHeld(); }
+        // Only a server that said it cannot generate hides the bar; an unanswered check keeps it, greyed.
+        generationAsked = true; genHost.hidden = !ready && store.generationGone; element.dataset.generationReady = ready ? 'true' : store.generationGone ? 'false' : 'waiting';
+        settleGenbar(); settleService(); if (ready) { offerInitial?.(); extendEntry?.(); void startHeld(); }
         // Parts queued while waiting for the answer never start here; they go back to drafts with the reason.
         else if (store.generationGone && held.length) {
             for (const entry of held.splice(0)) markHeld(entry.ids, false);
@@ -333,8 +334,10 @@ export function openEditor({api, app, from = null, panel = {}, components: given
     let generationAsked = store.generationAvailable, loaded = false;
     const settleGenbar = () => {
         // While the engine is still answering, a press queues the part instead of doing nothing.
-        genHost.inert = !loaded || generationAsked && !store.generationAvailable; genHost.classList.toggle('fv-ed-pending', !loaded);
+        genHost.inert = !loaded; genHost.classList.toggle('fv-ed-pending', !loaded);
     };
+    // When every automatic check went unanswered, the bar's line offers to check again; not while a check runs.
+    const settleService = () => genbar?.service(store.generationStalled ? {checking: store.generationChecking, retry: () => store.retryGeneration()} : null);
     store.generationReady();
     const queue = store.createSaveQueue({get record() { return state.record; },
         adopt(value) {
@@ -759,6 +762,8 @@ export function openEditor({api, app, from = null, panel = {}, components: given
         },
         generationLimits: () => ({maxSeconds: capability.maxSeconds, maxFollowSeconds: capability.maxFollowSeconds}),
         generationAvailable: () => store.generationAvailable,
+        // The server was asked and has not said yes: Generate is greyed until it does.
+        generationWaiting: () => generationAsked && !store.generationAvailable,
         importFiles: (files, options) => library?.importFiles(files, options),
         gestureStart({selectionGesture = false} = {}) {
             pointerEditing = true;
@@ -1118,7 +1123,7 @@ export function openEditor({api, app, from = null, panel = {}, components: given
         return running;
     }
 
-    genbar = createEditorGenbar(genHost, {state, t, actions, text: ''});
+    genbar = createEditorGenbar(genHost, {state, t, actions, text: ''}); settleService();
     const adjust = adjustPanel = createAdjustPanel(adjustHost, {state, t, actions});
     const pictureEdit = pictureSession(state, t);
     const notes = createBlockNotes({state, t, actions}); actions.blockNote = notes.decorate; actions.describedTrack = describedTrack;

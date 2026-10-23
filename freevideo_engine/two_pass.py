@@ -298,8 +298,10 @@ def stage_tokens(canvas):
     refinement = None
     if sampling.get('enabled'):
         steps(sampling)
-        expected = plan(canvas, task=canvas.get('task', 't2va'),
-                        base_steps=sampling['base_steps'], refine_steps=sampling['refine_steps'])
+        # The receipt records a non-default upscale factor and a staged first pass; the check replays both.
+        expected = plan(canvas, task=canvas.get('task', 't2va'), base_steps=sampling['base_steps'],
+                        refine_steps=sampling['refine_steps'], staged=sampling.get('staged', False),
+                        scale=sampling.get('scale', 2))
         if any(sampling.get(key) != expected[key] for key in ('first', 'second')):
             raise ValueError('Early reference sampling geometry disagrees with the request')
         from .geometry import geometry

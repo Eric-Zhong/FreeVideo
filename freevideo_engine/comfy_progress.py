@@ -2,6 +2,8 @@
 from copy import deepcopy
 from pathlib import Path
 import heapq
+import json
+import os
 import threading
 import time
 import uuid
@@ -173,6 +175,7 @@ class ReportDownloads:
     """Only server-registered runs are readable; clients never supply a path."""
     def __init__(self):
         self.runs = {}
+        self.roots = set()
         self.lock = threading.Lock()
 
     def register(self, output):
@@ -181,11 +184,59 @@ class ReportDownloads:
             self.runs[token] = Path(output)
             while len(self.runs) > 64:
                 del self.runs[next(iter(self.runs))]
+        self._remember(token, Path(output))
         return token
 
-    def snapshot(self, token):
+    def _lookup(self, token):
         with self.lock:
             output = self.runs.get(token)
+        if output is None and isinstance(token, str) and len(token) == 32 and token.isalnum():
+            output = self._recall(token)
+        return output
+
+    @staticmethod
+    def _index(output):
+        # The run folder is <output>/FreeVideo/<date>/<run>; any other layout is not persisted.
+        root = output.parent.parent.parent
+        return (root / '.agent' / 'report-ids.json') if root.name == 'FreeVideo' else None
+
+    def _remember(self, token, output):
+        """Keep the token readable after the service restarts: a failed run's report is otherwise unreachable."""
+        index = self._index(output)
+        if index is None:
+            return
+        try:
+            try:
+                rows = json.loads(index.read_text('utf-8'))
+            except (OSError, ValueError):
+                rows = {}
+            rows = {key: value for key, value in (rows if isinstance(rows, dict) else {}).items()
+                    if isinstance(value, str)}
+            self.roots.add(index.parent.parent)
+            rows[token] = output.relative_to(index.parent.parent).as_posix()
+            while len(rows) > 256:
+                del rows[next(iter(rows))]
+            index.parent.mkdir(parents=True, exist_ok=True)
+            temporary = index.with_name('report-ids.%s.tmp' % uuid.uuid4().hex)
+            temporary.write_text(json.dumps(rows), 'utf-8')
+            os.replace(temporary, index)
+        except Exception:
+            pass  # Reports stay readable in this process; the index is only a convenience.
+
+    def _recall(self, token):
+        """The registered output of an earlier service, from the index beside its runs."""
+        for root in self.roots:
+            try:
+                rows = json.loads((root / '.agent' / 'report-ids.json').read_text('utf-8'))
+                relative = rows.get(token) if isinstance(rows, dict) else None
+                if isinstance(relative, str) and relative and not Path(relative).is_absolute() and '..' not in Path(relative).parts:
+                    return root / relative
+            except (OSError, ValueError):
+                continue
+        return None
+
+    def snapshot(self, token):
+        output = self._lookup(token)
         if output is None:
             raise KeyError('Unknown report')
         from .support_report import write
@@ -203,8 +254,7 @@ class ReportDownloads:
         """The newest frame preview picture of a registered run, or KeyError."""
         from .frame_preview import FILE
         from .diagnostics import is_link
-        with self.lock:
-            output = self.runs.get(token)
+        output = self._lookup(token)
         if output is None:
             raise KeyError('Unknown run')
         path = output.parent / FILE
@@ -294,6 +344,11 @@ def register():
     if server is None or getattr(server, '_freevideo_progress', False):
         return
     server._freevideo_progress = True
+    try:
+        import folder_paths
+        REPORTS.roots.add(Path(folder_paths.get_output_directory()).resolve() / 'FreeVideo')
+    except Exception:
+        pass  # Without it only runs of this process (and their index folders) are found.
     report_lock = asyncio.Lock()
 
     @server.routes.get('/freevideo/report/{report_id}')

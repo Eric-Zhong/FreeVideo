@@ -6,6 +6,7 @@
 .fv-chat[data-conversations=true]{grid-template-columns:var(--fv-chats-width) minmax(0,1fr)}
 .fv-chat-conversations{position:relative;box-sizing:border-box;min-height:0;min-width:0;display:flex;flex-direction:column;gap:var(--fv-chats-gap);padding:16px var(--fv-chats-pad);border-right:1px solid var(--fv-border);background:var(--fv-bg)}
 .fv-chat-conversation-list{min-height:0;overflow:auto;display:grid;align-content:start;gap:var(--fv-chats-gap)}
+.fv-chat-unreadable{flex:none;margin:8px 0;font-size:12px;color:var(--fv-muted);text-align:left}.fv-chat-unreadable:empty{display:none}
 .fv-studio .fv-chat-conversations button{box-sizing:border-box;flex:none;justify-content:flex-start;min-width:0;width:100%;min-height:var(--fv-chats-row);padding:8px var(--fv-chats-pad);border-radius:var(--fv-chats-radius);border:1px solid transparent;background:transparent;font-size:var(--fv-chats-font);font-weight:var(--fv-regular);color:var(--fv-ink);text-align:left;gap:10px}
 .fv-studio .fv-chat-conversations .fv-chat-new{border-color:var(--fv-border);margin-bottom:6px}
 .fv-studio .fv-chat-conversations button:hover:not(:disabled){background:var(--fv-raised)}

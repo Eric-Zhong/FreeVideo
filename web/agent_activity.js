@@ -159,8 +159,12 @@ export function createAgentActivity(t, api, host, {interval = [1500, 8000], open
         header.append(el('h2', null, t('Agent jobs', 'Agent 任务')));
         const list = el('ol');
         const key = refill(panel, list, rows(data.jobs, t, api, poll, job => { setOpen(false); open(job); }, cancellationErrors));
+        const unreadable = Number.isSafeInteger(data.unreadable) && data.unreadable > 0 ? data.unreadable : 0;
+        const skipped = el('div', 'fv-agent-unreadable', unreadable > 0
+            ? t(`${unreadable} ${unreadable === 1 ? 'job' : 'jobs'} could not be read`, `另有 ${unreadable} 个任务无法读取`) : '');
+        skipped.hidden = !unreadable;
         panel.replaceChildren();
-        panel.append(header, list);
+        panel.append(header, list, skipped);
         if (key) (panel.querySelector(`[data-job="${key[0]}"] .${key[1].split(' ')[0]}`) || panel).focus?.();
     }
     function render() {

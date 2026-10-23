@@ -480,6 +480,7 @@ class Jobs:
         self.directory = Path(directory)
         self.clock = clock
         self.jobs = {}
+        self.unreadable = 0
         self.lock = threading.RLock()
         self._receipts = _ReceiptWrites(self.directory) if windows() else None
         self.cpu = threading.Semaphore(1)
@@ -507,28 +508,68 @@ class Jobs:
 
     # Records -------------------------------------------------------------------------------------------
     def load(self):
+        self.unreadable = 0
         if not self.directory.is_dir():
             return
         # One atomic batch receipt is the commit point. Later per-job records
         # override its initial rows. A crash never exposes a partial submission.
         initial = {}
+        unreadable_ids, unreadable_batches = set(), set()
+
+        def readable(row):
+            return (isinstance(row, dict) and specs.JOB_ID.fullmatch(str(row.get('id')))
+                    and row.get('kind') in ('generate', 'assemble', 'export', 'listen', 'image_edit') + GPU_KINDS
+                    and row.get('status') in ACTIVE + DONE and isinstance(row.get('spec'), dict)
+                    and type(row.get('created_at')) in (int, float) and math.isfinite(row['created_at'])
+                    and (self._receipts is None or (type(row.get('_receipt_revision', 0)) is int
+                         and row.get('_receipt_revision', 0) >= 0)))
+
         for path in sorted(self.directory.glob('b*.json')):
+            if not re.fullmatch(r'b[0-9a-f]{32}', path.stem):
+                continue
             try:
                 batch = json.loads(path.read_text(encoding='utf-8'))
-                initial.update({r['id']: r for r in batch['jobs']})
-            except (OSError, ValueError, KeyError, TypeError):
+                if not isinstance(batch, dict) or not isinstance(batch.get('jobs'), list):
+                    raise ValueError
+            except FileNotFoundError:
                 continue
+            except (OSError, ValueError, KeyError, TypeError):
+                unreadable_batches.add(path)
+                logging.getLogger(__name__).warning('Skipped an unreadable batch file')
+                continue
+            bad = False
+            for row in batch['jobs']:
+                if readable(row):
+                    initial[row['id']] = row
+                else:
+                    bad = True
+                    identity = row.get('id') if isinstance(row, dict) else None
+                    if isinstance(identity, str) and specs.JOB_ID.fullmatch(identity):
+                        unreadable_ids.add(identity)
+                    else:
+                        # No task id can be recovered: count this receipt once.
+                        unreadable_batches.add(path)
+            if bad:
+                logging.getLogger(__name__).warning('Skipped an unreadable batch file')
         records = list(initial.values())
         for path in sorted(self.directory.glob('j*.json')):
-            try:
-                records.append(json.loads(path.read_text(encoding='utf-8')))
-            except (OSError, ValueError):
+            if not specs.JOB_ID.fullmatch(path.stem):
                 continue
+            try:
+                row = json.loads(path.read_text(encoding='utf-8'))
+                if not readable(row) or row['id'] != path.stem:
+                    raise ValueError
+                records.append(row)
+            except FileNotFoundError:
+                continue
+            except (OSError, ValueError):
+                unreadable_ids.add(path.stem)
+                logging.getLogger(__name__).warning('Skipped an unreadable job file')
         if self._receipts is not None:
             for path in sorted(self.directory.glob('j*.pending')):
                 try:
                     row = json.loads(path.read_text(encoding='utf-8'))
-                    if isinstance(row, dict) and path.name.startswith(str(row.get('id')) + '.'):
+                    if readable(row) and path.name.startswith(str(row.get('id')) + '.'):
                         records.append(row)
                 except (OSError, ValueError):
                     continue  # An interrupted staging write is not a receipt.
@@ -545,10 +586,7 @@ class Jobs:
                     latest[row['id']] = row
             records = list(latest.values())
         for row in records:
-            if (isinstance(row, dict) and specs.JOB_ID.fullmatch(str(row.get('id')))
-                    and row.get('kind') in ('generate', 'assemble', 'export', 'listen', 'image_edit') + GPU_KINDS
-                    and row.get('status') in ACTIVE + DONE and isinstance(row.get('spec'), dict)
-                    and type(row.get('created_at')) in (int, float) and math.isfinite(row['created_at'])):
+            if readable(row):
                 if row.get('status') == 'running' and row['kind'] in ('assemble', 'export', 'listen', 'image_edit') + GPU_KINDS:
                     # This process restarted while the work ran in it; nothing continues it.
                     self.finish(row, 'failed', error=dict(code='interrupted',
@@ -564,6 +602,7 @@ class Jobs:
                     # Before device-aware Agent planning, every accepted job used the unknown limit.
                     row['spec'].setdefault('single_max_frames', None)
                 self.jobs[row['id']] = row
+        self.unreadable = len(unreadable_batches) + len(unreadable_ids - self.jobs.keys())
         for row in self.jobs.values():
             if (row['kind'] != 'generate' or row['spec'].get('refine_from')
                     or row['status'] in DONE and not row.get('resume_pending')

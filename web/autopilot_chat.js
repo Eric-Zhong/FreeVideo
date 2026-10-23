@@ -376,6 +376,7 @@ export function agentChat(t, api, {open, edit, shown = () => true, changed = () 
     let listBusy = false, listAgain = false, listAt = -Infinity;
     const listInterval = 10000;
     const sidebar = el('nav', 'fv-chat-conversations'), list = el('div', 'fv-chat-conversation-list'), tools = el('div', 'fv-chat-tools');
+    const skippedConversations = el('div', 'fv-chat-unreadable'); skippedConversations.hidden = true;
     sidebar.id = `fv-chat-conversations-${++chatNumber}`; sidebar.setAttribute('aria-label', t('Chats', '对话')); sidebar.hidden = true;
     const newChat = press('fv-chat-new', t('New chat', '新对话'), () => void startChat());
     newChat.prepend(glyph('M12 5v14M5 12h14')); newChat.title = t('New chat', '新对话');
@@ -394,7 +395,7 @@ export function agentChat(t, api, {open, edit, shown = () => true, changed = () 
     chats.append(glyph('M4 5h16v12H9l-5 4V5M8 9h8M8 13h5'), chatsDot);
     chats.title = t('Chats', '对话'); chats.setAttribute('aria-label', chats.title);
     chats.setAttribute('aria-controls', sidebar.id); chats.setAttribute('aria-expanded', 'false');
-    tools.hidden = true; tools.append(chats); main.prepend(tools); sidebar.append(newChat, newError, newIssue, deleteError, list); element.prepend(sidebar);
+    tools.hidden = true; tools.append(chats); main.prepend(tools); sidebar.append(newChat, newError, newIssue, deleteError, list, skippedConversations); element.prepend(sidebar);
     const listNodes = new Map(), narrow = () => window.matchMedia('(max-width: 720px)').matches;
     let menuState = null, changingMenu = false;
     const deleting = new Set(), deleted = new Set();
@@ -479,7 +480,10 @@ export function agentChat(t, api, {open, edit, shown = () => true, changed = () 
         const lostFocus = previous && inMenu(document.activeElement);
         menuState = conversationMenu(conversations, menuState);
         // After the final deletion, keep New chat reachable as the keyboard destination.
-        const visible = hasConversations(conversations) || conversations.supported === true && deleted.size > 0;
+        const unreadable = conversations.unreadable;
+        skippedConversations.textContent = unreadable > 0 ? t(`${unreadable} ${unreadable === 1 ? 'conversation' : 'conversations'} could not be read`, `另有 ${unreadable} 个对话无法读取`) : '';
+        skippedConversations.hidden = !unreadable;
+        const visible = hasConversations(conversations) || conversations.supported === true && (deleted.size > 0 || unreadable > 0);
         element.dataset.conversations = String(visible); sidebar.hidden = tools.hidden = !visible;
         if (!visible) drawer(false);
         newChat.disabled = creating; chatsDot.hidden = !conversations.conversations.some(row => row.running > 0);

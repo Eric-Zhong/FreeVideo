@@ -28,7 +28,7 @@ export function createCastLibrary({api, text, viewURL, uploadOne, onChange = () 
         const css = el('link'); css.rel = 'stylesheet'; css.dataset.freevideoCast = '';
         css.href = new URL('./cast_library.css', import.meta.url).href; document.head.append(css);
     }
-    let rows = [], mentioned = new Set(), disposed = false, request = 0, current = null, broadcasting = false;
+    let rows = [], unreadable = 0, mentioned = new Set(), disposed = false, request = 0, current = null, broadcasting = false;
     const subscribers = new Set();
     const element = el('div', 'fv-cast-library');
     // The row shows, and the page session is asked for, only once /freevideo/agent says the interface is on.
@@ -36,9 +36,10 @@ export function createCastLibrary({api, text, viewURL, uploadOne, onChange = () 
     const probe = agentInterfaceEnabled(api).then(on => { available = on && !disposed; element.hidden = !available; return available; });
     const heading = el('span', 'fv-cast-heading', text('Characters', '角色'));
     const avatars = el('div', 'fv-cast-avatars');
+    const skipped = el('div', 'fv-cast-unreadable'); skipped.hidden = true;
     const add = button('fv-cast-add', '+', () => openDialog());
     add.setAttribute('aria-label', text('New character', '新建角色'));
-    element.append(heading, avatars, add);
+    element.append(heading, avatars, add, skipped);
 
     async function value(response) {
         const data = await response.json().catch(() => null);
@@ -62,6 +63,8 @@ export function createCastLibrary({api, text, viewURL, uploadOne, onChange = () 
     };
     function render() {
         avatars.replaceChildren(); heading.hidden = !rows.length;
+        skipped.textContent = unreadable > 0 ? text(`${unreadable} ${unreadable === 1 ? 'character' : 'characters'} could not be read`, `另有 ${unreadable} 个角色无法读取`) : '';
+        skipped.hidden = !unreadable;
         for (const row of rows) {
             const avatar = button('fv-cast-avatar', '', () => openDialog(row.id));
             avatar.classList.toggle('fv-cast-mentioned', mentioned.has(row.id));
@@ -76,7 +79,8 @@ export function createCastLibrary({api, text, viewURL, uploadOne, onChange = () 
         const serial = ++request;
         const data = await value(await agentGet(api, '/freevideo/agent/cast?kind=character&limit=200'));
         if (!disposed && serial === request) {
-            rows = data.cards; render(); onChange(rows);
+            rows = data.cards; unreadable = Number.isSafeInteger(data.unreadable) && data.unreadable > 0 ? data.unreadable : 0;
+            render(); onChange(rows);
             for (const fn of subscribers) fn(rows);
         }
         return rows;

@@ -743,9 +743,11 @@ export function openEditor({api, app, from = null, panel = {}, components: given
         const remove = button(deleteEditText(t).item, confirmDelete, 'fv-ed-delete'); remove.setAttribute('role', 'menuitem'); menu.append(remove);
         try {
             // The current edit is already named in the box at the top.
-            const rows = (await store.projects()).filter(row => row.id !== state.record.id && !hiddenEmptyEdit(row, initial())); if (disposed || menu.hidden || !menu.contains(name)) return;
-            if (rows.length) { const line = el('div'); line.setAttribute('role', 'separator'); menu.append(line); }
+            const listed = await store.projects(), unread = listed.unreadable || 0;
+            const rows = listed.filter(row => row.id !== state.record.id && !hiddenEmptyEdit(row, initial())); if (disposed || menu.hidden || !menu.contains(name)) return;
+            if (rows.length || unread) { const line = el('div'); line.setAttribute('role', 'separator'); menu.append(line); }
             for (const row of rows) { const item = button(row.name || new Date(row.updated_at).toLocaleDateString(), () => switchProject(row.id), 'fv-ed-project'); item.setAttribute('role', 'menuitem'); item.title = item.textContent; menu.append(item); }
+            if (unread) menu.append(el('p', 'fv-ed-unreadable', t(`${unread} ${unread === 1 ? 'edit' : 'edits'} could not be read`, `另有 ${unread} 个剪辑无法读取`)));
         } catch (value) { error(value, null, undefined, 'projects'); }
         name.focus(); name.select();
     }

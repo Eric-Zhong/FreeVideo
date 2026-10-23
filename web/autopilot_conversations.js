@@ -1,5 +1,5 @@
 // The list is a server snapshot, in the server's order. An unsaid current conversation need not be in it.
-export const emptyConversations = () => ({supported: null, current: null, conversations: []});
+export const emptyConversations = () => ({supported: null, current: null, conversations: [], unreadable: 0});
 export const selectConversation = (state, session) => ({...state, current: session ?? null});
 export const hasConversations = state => state.supported === true && state.conversations.length > 0;
 // The first other conversation with work under way; null when there is none.
@@ -21,7 +21,7 @@ export const removeConversation = (state, session, here = null) => ({...state,
 
 export function mergeConversations(state, data, status = 200) {
     // A legacy server is probed once per page; ordinary errors retain the last good snapshot.
-    if (status === 404) return {...state, supported: false, conversations: []};
+    if (status === 404) return {...state, supported: false, conversations: [], unreadable: 0};
     if (state.supported === false || status !== 200 || !Array.isArray(data?.conversations)) return state;
     const seen = new Set(), conversations = [];
     for (const row of data.conversations) {
@@ -34,5 +34,6 @@ export function mergeConversations(state, data, status = 200) {
             running: Math.max(0, Math.floor(Number(row.running) || 0))});
         if (conversations.length === 50) break;
     }
-    return {...state, supported: true, conversations};
+    return {...state, supported: true, conversations,
+        unreadable: Number.isSafeInteger(data.unreadable) && data.unreadable > 0 ? data.unreadable : 0};
 }

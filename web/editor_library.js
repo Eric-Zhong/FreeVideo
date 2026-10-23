@@ -15,11 +15,12 @@ export function createEditorLibrary(host, {store, t, actions, state}) {
     importButton.type = 'button'; searchTools.append(search, importButton);
     const grid = el('div', 'fv-ed-library-grid'); grid.setAttribute('role', 'tabpanel');
     const message = el('p', 'fv-ed-library-message'); message.setAttribute('role', 'status');
+    const unreadable = el('p', 'fv-ed-unreadable');
     const file = el('input'); file.type = 'file'; file.multiple = true; file.hidden = true;
     file.accept = '.mp4,.mov,.webm,.mkv,.m4v,.wav,.mp3,.flac,.ogg,.m4a,.aac,.opus';
     importButton.onclick = () => file.click();
-    host.append(tabs, searchTools, grid, message, file);
-    let tab = 'work', rows = [], imported = [], next = null, disposed = false, loading = false;
+    host.append(tabs, searchTools, grid, message, unreadable, file);
+    let tab = 'work', rows = [], imported = [], importUnread = 0, next = null, disposed = false, loading = false;
     let listRead = Promise.resolve(), refreshTask = null, retryTimer = null, finishRetry = null, refreshAgain = false;
     const expectedOutputs = new Set();
     const uploading = new Map(), recentImports = new Map(), pendingAdds = new Map();
@@ -136,6 +137,8 @@ export function createEditorLibrary(host, {store, t, actions, state}) {
             const [text, where] = importFailure(failed.reason); message.textContent = text;
             if (where) message.append(issueButton(t, () => ({where, message: text})));
         }
+        const unread = tab === 'import' ? importUnread : 0;
+        unreadable.textContent = unread ? t(`${unread} imported ${unread === 1 ? 'file' : 'files'} could not be read`, `另有 ${unread} 个导入的文件无法读取`) : '';
         if (scroll > 0) {
             const replacement = anchor && [...grid.querySelectorAll('.fv-ed-source')].find(node => node.dataset.key === anchor.dataset.key);
             host.scrollTop = replacement ? scroll + replacement.getBoundingClientRect().top - anchorTop : scroll;
@@ -245,7 +248,7 @@ export function createEditorLibrary(host, {store, t, actions, state}) {
     const stop = store.watchImports(items => {
         for (const item of items) recentImports.delete(item.id);
         // A list request started before an upload may finish after it.
-        imported = [...recentImports.values(), ...items]; render();
+        imported = [...recentImports.values(), ...items]; importUnread = items.unreadable || 0; render();
         placeReady(imported); startPending(imported);
     });
     const stopUsed = state?.subscribe(event => { if (event.type === 'record') updateUsed(); });

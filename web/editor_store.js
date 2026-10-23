@@ -217,6 +217,12 @@ export function createEditorStore(api, {t = en => en, notify = () => {}, onGener
         if (query.id) return copy(memoryProjects.get(query.id) || (query.id === 'memory' ? memoryProjects.get('memory') : null));
         return copy([...memoryProjects.values()].find(record => record.tracks[0].clips[0]?.source?.id === query.work) || null);
     }
+    // A list keeps how many damaged records the server left out of it.
+    function counted(value) {
+        const items = Array.isArray(value?.items) ? value.items : [];
+        const unreadable = Number.isSafeInteger(value?.unreadable) && value.unreadable > 0 ? value.unreadable : 0;
+        return Object.defineProperty(items, 'unreadable', {value: unreadable});
+    }
     // lost: called once after three reads in a row fail; the watch then stops.
     function watch(read, deliver, lost = null) {
         let failures = 0, poller = null;
@@ -333,10 +339,7 @@ export function createEditorStore(api, {t = en => en, notify = () => {}, onGener
                 if (recovered) break;
             }
         }, load: id => load({id}), byWork: work => load({work}),
-        async projects() {
-            const value = await json('/freevideo/editor/projects', undefined, {items: []});
-            return value.items || [];
-        },
+        async projects() { return counted(await json('/freevideo/editor/projects', undefined, {items: []})); },
         createSaveQueue(state, {onStatus = () => {}} = {}) {
             const queue = createSaveQueue({clock, session, onStatus, initial: state.record, getRecord: () => state.record, copySuffix: t(' (copy)', '（副本）'), write: (record, create, operation) => { const options = post({project: record, operation, ...(create ? {create} : {})}); return request('/freevideo/editor/project', {...options, keepalive: new TextEncoder().encode(options.body).length < 60000}); },
                 read: id => store.load(id),
@@ -386,7 +389,7 @@ export function createEditorStore(api, {t = en => en, notify = () => {}, onGener
             if (Object.keys(fallback).length) cache(fallback);
             return value;
         },
-        async imports() { return (await json('/freevideo/editor/imports', undefined, {items: []})).items || []; },
+        async imports() { return counted(await json('/freevideo/editor/imports', undefined, {items: []})); },
         watchImports(fn) { return watch(() => store.imports(), items => { fn(items); return true; }); },
         upload(file, progress = () => {}) {
             if (disposed) return Promise.reject(new Error('editor_closed'));

@@ -159,12 +159,19 @@ export function jobParts(job) {
     return Array.from({length: block.total}, (_, i) => i < (block.done || 0) ? 1 : i === block.index - 1 ? inside : 0);
 }
 
+// Saves a picture through the browser's own download, under the file's name.
+function saveImage(src) {
+    const link = el('a'); link.href = src; link.download = new URL(src, location.href).searchParams.get('filename') || '';
+    document.body.append(link); link.click(); link.remove();
+}
+
 // A picture is viewed here, independently of the video library. The image stays within reach while zoomed.
 function imageViewer(t, src, name, opener, failed) {
     const dialog = el('dialog', 'fv-studio fv-chat-image-viewer'), actions = el('div', 'fv-chat-actions');
     dialog.setAttribute('aria-label', name);
     const close = press('fv-close', '×', () => closeDialog(dialog));
-    close.setAttribute('aria-label', t('Close', '关闭')); close.title = t('Close', '关闭'); actions.append(close);
+    close.setAttribute('aria-label', t('Close', '关闭')); close.title = t('Close', '关闭');
+    actions.append(press('fv-chat-save', t('Download', '下载'), () => saveImage(src)), close);
     const stage = el('div', 'fv-chat-image-stage'), image = el('img');
     image.alt = name; image.draggable = false; stage.append(image); dialog.append(actions, stage);
     let scale = 1, fit = 1, x = 0, y = 0, disposed = false;
@@ -797,7 +804,8 @@ export function agentChat(t, api, {open, edit, shown = () => true, changed = () 
             dismissImage = imageViewer(t, api.apiURL(job.thumbnail), name.textContent, show, () => { show.disabled = true; });
         });
         const cut = press('fv-chat-edit', t('Edit', '剪辑'), () => edit(job));
-        if (picture && job.thumbnail) { show.disabled = true; foot.append(show); }
+        const save = press('fv-chat-save', t('Download', '下载'), () => saveImage(api.apiURL(job.thumbnail)));
+        if (picture && job.thumbnail) { show.disabled = save.disabled = true; foot.append(show, save); }
         else if (!picture && job.work) foot.append(show, cut);
         info.append(head); if (foot.childElementCount) info.append(foot);
         const children = [info];
@@ -805,7 +813,7 @@ export function agentChat(t, api, {open, edit, shown = () => true, changed = () 
             const {box, shape} = preview(job), length = el('span', 'fv-chat-length', job.seconds > 0 ? clock(job.seconds) : '');
             if (job.thumbnail) {
                 const image = el('img'); image.alt = '';
-                const viewable = on => { show.disabled = !on; if (on) box.dataset.open = 'true'; else delete box.dataset.open; };
+                const viewable = on => { show.disabled = save.disabled = !on; if (on) box.dataset.open = 'true'; else delete box.dataset.open; };
                 image.onload = () => { if (!box.style.aspectRatio) shape(image.naturalWidth, image.naturalHeight); if (picture) viewable(true); };
                 if (picture) { image.onerror = () => viewable(false); box.onclick = () => { if (!show.disabled) show.click(); }; }
                 image.src = api.apiURL(job.thumbnail); box.append(image);
@@ -858,7 +866,7 @@ export function agentChat(t, api, {open, edit, shown = () => true, changed = () 
         item.replaceChildren(...children);
         return (next, latest) => {
             name.textContent = jobName(next, t); meta.textContent = jobMeta(next, t); meta.hidden = !meta.textContent;
-            if (picture) show.setAttribute('aria-label', t('Open ', '打开 ') + jobName(next, t));
+            if (picture) { show.setAttribute('aria-label', t('Open ', '打开 ') + jobName(next, t)); save.setAttribute('aria-label', t('Download ', '下载 ') + jobName(next, t)); }
             show.classList.toggle('fv-primary', latest);
         };
     }

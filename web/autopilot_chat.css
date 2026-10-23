@@ -83,6 +83,8 @@
 .fv-studio.fv-chat-image-viewer[open]{display:grid;grid-template-rows:auto minmax(0,1fr);gap:12px;padding:12px;border-radius:14px;background:var(--fv-card)}
 .fv-chat-image-viewer>.fv-chat-actions{justify-content:flex-end}
 .fv-studio.fv-chat-image-viewer .fv-close{min-height:34px;width:34px;padding:0;font-size:20px;line-height:1;background:transparent;border-color:transparent;color:var(--fv-muted)}
+.fv-studio.fv-chat-image-viewer .fv-chat-save{min-height:34px;padding:0 14px;border-radius:7px;font-size:13px;background:transparent;border-color:transparent;color:var(--fv-muted)}
+.fv-studio.fv-chat-image-viewer .fv-chat-save:hover{background:var(--fv-raised);color:var(--fv-ink)}
 .fv-studio.fv-chat-image-viewer .fv-close:hover{background:var(--fv-raised);color:var(--fv-ink)}
 .fv-chat-preview[data-open=true]{cursor:zoom-in}
 .fv-chat-image-stage{position:relative;min-width:0;min-height:0;overflow:hidden;border-radius:9px;background:var(--fv-bg);touch-action:none;cursor:grab;user-select:none}

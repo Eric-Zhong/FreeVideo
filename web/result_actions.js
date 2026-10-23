@@ -18,6 +18,7 @@ const ICONS = {
     lock: '<rect x="3.5" y="7" width="9" height="6.5" rx="1.5"/><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"/>',
     close: '<path d="m4 4 8 8M12 4l-8 8"/>',
     expand: '<path d="M9.5 2.5h4v4M13.5 2.5 9 7M6.5 13.5h-4v-4M2.5 13.5 7 9"/>',
+    copy: '<rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5v-1a1 1 0 0 0-1-1h-5a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1h1"/>',
     trash: '<path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 8.1a1 1 0 0 0 1 .9h3.8a1 1 0 0 0 1-.9l.6-8.1M7 7v4M9 7v4"/>',
 };
 
@@ -130,6 +131,15 @@ export function actionsUnavailable(bar) {
     }
 }
 
+// Writes text to the clipboard; resolves false when neither the clipboard API nor the old copy command is allowed.
+export async function copyText(text) {
+    try { await navigator.clipboard.writeText(text); return true; } catch { /* fall through to the selection copy */ }
+    const area = document.createElement('textarea'); area.value = text; area.setAttribute('readonly', '');
+    area.style.cssText = 'position:fixed;top:0;left:0;opacity:0';
+    document.body.append(area); area.select();
+    try { return document.execCommand('copy'); } catch { return false; } finally { area.remove(); }
+}
+
 // Download the video first; share and the report follow. A first-pass preview
 // leads with `secondPass` instead, and saved creations end with `remove`.
 // `diagnostic` downloads the redacted report (and may offer to send it); a
@@ -142,6 +152,17 @@ export function resultActions(record, t, {diagnostic = null, secondPass = null, 
         const download = action('a', t('Download video', '下载视频'), 'download', secondPass ? 'fv-action-secondary' : 'fv-action-primary');
         download.href = outputDownloadURL(api, record.video); download.download = '';
         bar.append(download);
+        const copy = action('button', t('Copy path', '复制路径'), 'copy', 'fv-action-secondary fv-action-copy');
+        const text = copy.lastElementChild; let timer = 0;
+        // The button keeps the width of its longest label, so the bar does not shift when the label changes.
+        text.className = 'fv-copy-text';
+        text.dataset.widest = [t('Copy path', '复制路径'), t('Copied', '已复制'), t('Could not copy', '复制失败')].sort((a, b) => b.length - a.length)[0];
+        copy.onclick = async () => {
+            clearTimeout(timer);
+            text.textContent = await copyText(record.video) ? t('Copied', '已复制') : t('Could not copy', '复制失败');
+            timer = setTimeout(() => { text.textContent = t('Copy path', '复制路径'); }, 1800);
+        };
+        bar.append(copy);
     }
     if (extend && canExtend(record)) {
         const button = action('button', extendText(t, 'action'), 'extend', 'fv-action-secondary fv-action-extend');

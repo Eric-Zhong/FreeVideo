@@ -117,6 +117,14 @@ WINDOWS_SMALL_HEAD8_FRAMES = 243
 # 960x544x243 went from head 4 with one block (10.37 s/step, 4.68 GiB) to
 # head 8 with none (8.43 s, 4.18 GiB).
 WINDOWS_INT8_HEAD8_TOKENS = 72576
+# Native FP8 (Ada and Blackwell) takes the same rule up to a two-pass first
+# pass. On a Blackwell card held to an 8 GiB laptop's 6.48 GiB allocator limit
+# with the Windows allocator (no expandable segments), 832x448x243 (26208 rows)
+# with two resident blocks and the second slot peaked 4.74 GiB reserved with
+# four heads and 5.03 with eight, 0.29 GiB against the 0.42 the rule charges at
+# this length.
+# Full-resolution FP8 stays on four heads until it is measured.
+WINDOWS_FP8_HEAD8_TOKENS = 4 * 9072
 WINDOWS_INT8_HEAD8_EXTRA = int(1.15 * GiB)
 # Beyond that row count the four-head plan stayed on 12 GB cards although the
 # budget covers eight heads. Reserved peak of eight heads and no resident
@@ -1186,10 +1194,11 @@ def _choose(hardware: Hardware, *, vram_gib=None, ram_gib=None, attention='auto'
                               and effective_tokens is not None
                               and canvas['frames'] <= WINDOWS_SMALL_HEAD8_FRAMES
                               and effective_tokens <= WINDOWS_SMALL_HEAD8_TOKENS)
-        windows_int8_full = (desktop and int8 and not lora and legs == ['sage2', 'sage2']
+        windows_int8_full = (desktop and not lora and legs == ['sage2', 'sage2']
                              and effective_tokens is not None
                              and canvas['frames'] <= WINDOWS_SMALL_HEAD8_FRAMES
-                             and WINDOWS_SMALL_HEAD8_TOKENS < effective_tokens <= WINDOWS_INT8_HEAD8_TOKENS)
+                             and WINDOWS_SMALL_HEAD8_TOKENS < effective_tokens
+                             <= (WINDOWS_INT8_HEAD8_TOKENS if int8 else 0 if ampere else WINDOWS_FP8_HEAD8_TOKENS))
         windows_int8_staged_head8 = (desktop and int8 and not lora and legs == ['sage2', 'sage2']
                                      and effective_tokens is not None
                                      and canvas['frames'] <= WINDOWS_SMALL_HEAD8_FRAMES

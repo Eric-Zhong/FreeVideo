@@ -690,12 +690,14 @@ async function openFromMenu() {
     }
 }
 
-const desktopNoticeEnabled = () => (app.extensionManager?.setting?.get?.(DESKTOP_SETTING) ?? app.ui?.settings?.getSettingValue?.(DESKTOP_SETTING)) === true;
+const desktopNoticeEnabled = () => (app.extensionManager?.setting?.get?.(DESKTOP_SETTING) ?? app.ui?.settings?.getSettingValue?.(DESKTOP_SETTING) ?? true) === true;
 
 app.registerExtension({
     name: "FreeVideo.UnifiedMedia",
     settings: [{id: DESKTOP_SETTING, name: text('Desktop notification when done', '完成时发桌面通知'),
-        type: 'boolean', defaultValue: false, onChange: value => { if (value) askDesktopPermission(); }}],
+        type: 'boolean', defaultValue: true,
+        // ComfyUI calls onChange(value, undefined) while registering; only a switch from off to on is a user request.
+        onChange: (value, oldValue) => { if (oldValue === false && value === true) askDesktopPermission(window, {explicit: true}); }}],
     // The one entry that stays in ComfyUI's own menu, whatever workflow is in front.
     commands: [{id: 'FreeVideo.Open', label: 'FreeVideo', function: openFromMenu}],
     menuCommands: [{path: ['Extensions'], commands: ['FreeVideo.Open']}],
@@ -703,7 +705,8 @@ app.registerExtension({
     async setup() {
         // One failing part must not take the others down; health.js shows what failed.
         for (const [where, start] of [['progress', () => progressConnection.start()], ['navigation', () => installNavigation(showStudio, agentInterfaceState(api), {openWorkflow: openFreeVideoWorkflow, recheck: () => agentInterfaceState(api)})],
-            ['updates', startUpdateChecks], ['done-notify', () => startDoneNotify({api, text, desktop: desktopNoticeEnabled, isFreeVideoNode})],
+            ['updates', startUpdateChecks], ['done-notify', () => startDoneNotify({api, text, desktop: desktopNoticeEnabled, isFreeVideoNode,
+                isFreeVideoWorkflow: () => (app.graph?._nodes || []).some(isGenerate)})],
             ['whitebox', () => startWhiteboxWorker({api})]]) {
             try { start(); } catch (error) { health({type: 'error', where, error}); }
         }

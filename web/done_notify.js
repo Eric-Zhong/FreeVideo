@@ -1,11 +1,14 @@
 // Tells the user a long run has finished while FreeVideo is in a background tab:
 // the tab title flashes and one short beep plays until the page is shown again.
-// A desktop notification is sent only when the user turned it on in the settings.
+// Desktop notifications default on; an explicit opt-out keeps them off.
 // Only a queue that ran a FreeVideo node counts: other workflows finish silently.
 export const DESKTOP_SETTING = 'FreeVideo.DoneNotify.Desktop';
+const PERMISSION_ASKED = 'freevideo.desktop.notification-asked';
+const permissionAsked = new WeakSet();
 const LONG_RUN_MS = 20000, FLASH_MS = 1000;
 
-export function startDoneNotify({api, text, doc = document, win = window, now = () => Date.now(), desktop = () => false, isFreeVideoNode = () => false,
+export function startDoneNotify({api, text, doc = document, win = window, now = () => Date.now(), desktop = () => true, isFreeVideoNode = () => false,
+    isFreeVideoWorkflow = () => false,
     beep = playBeep, notify = desktopNotice, minimum = LONG_RUN_MS, setTimer = setInterval, clearTimer = clearInterval} = {}) {
     let busySince = null, failed = false, cancelled = false, flashing = null, involved = false;
     const away = () => doc.hidden || (typeof doc.hasFocus === 'function' && !doc.hasFocus());
@@ -43,6 +46,12 @@ export function startDoneNotify({api, text, doc = document, win = window, now = 
     };
     const interrupted = () => { cancelled = true; };
     const shown = () => { if (!away()) stopFlashing(); };
+    // Capture the actual Generate click before the host starts any async work.
+    // The workspace marks its button; current and older ComfyUI use the other two.
+    const generate = event => {
+        const button = event.target?.closest?.('[data-fv-guide="generate"], [data-testid="queue-button"], #queue-button');
+        if (button && !button.disabled && desktop() && isFreeVideoWorkflow()) askDesktopPermission(win);
+    };
     api.addEventListener('status', status);
     api.addEventListener('execution_error', error);
     api.addEventListener('execution_interrupted', interrupted);
@@ -50,13 +59,15 @@ export function startDoneNotify({api, text, doc = document, win = window, now = 
     api.addEventListener('freevideo_prewarm', freevideo);
     api.addEventListener('executing', executing);
     doc.addEventListener('visibilitychange', shown);
+    doc.addEventListener('click', generate, true);
     win.addEventListener?.('focus', shown);
     return {stop() {
         api.removeEventListener('status', status); api.removeEventListener('execution_error', error);
         api.removeEventListener('execution_interrupted', interrupted);
         api.removeEventListener('freevideo_progress', freevideo); api.removeEventListener('freevideo_prewarm', freevideo);
         api.removeEventListener('executing', executing);
-        doc.removeEventListener('visibilitychange', shown); win.removeEventListener?.('focus', shown); stopFlashing();
+        doc.removeEventListener('visibilitychange', shown); doc.removeEventListener('click', generate, true);
+        win.removeEventListener?.('focus', shown); stopFlashing();
     }};
 }
 
@@ -82,7 +93,17 @@ function desktopNotice(win, label, clicked) {
     notice.onclick = () => { clicked(); notice.close?.(); };
 }
 
-// Asks for notification permission when the user switches the setting on.
-export function askDesktopPermission(win = window) {
-    try { win.Notification?.requestPermission?.(); } catch { /* Optional. */ }
+// Call synchronously from a Generate gesture, never at startup or on completion.
+// A user turning the setting on is an explicit request, so it ignores the earlier record.
+export function askDesktopPermission(win = window, {explicit = false} = {}) {
+    const Notice = win.Notification;
+    if (Notice?.permission !== 'default' || typeof Notice.requestPermission !== 'function') return;
+    if (!explicit) {
+        if (permissionAsked.has(win)) return;
+        try { if (win.localStorage.getItem(PERMISSION_ASKED) === '1') return; } catch { /* Storage may be blocked. */ }
+    }
+    // Remember before requesting, including dismissals, throws and pending promises.
+    permissionAsked.add(win);
+    try { win.localStorage.setItem(PERMISSION_ASKED, '1'); } catch { /* Keep the in-memory guard. */ }
+    try { Notice.requestPermission()?.catch?.(() => {}); } catch { /* Optional. */ }
 }

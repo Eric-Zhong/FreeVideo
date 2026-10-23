@@ -39,6 +39,7 @@ class Element {
     close() { this.open = false; this.onclose?.(); }
 }
 
+globalThis.__permissionAsks = [];
 test('main browser entry registers both views and preserves node hooks', async t => {
     const extensions = [], opened = [], installed = [], events = new EventTarget();
     const issueURLs = [];
@@ -48,7 +49,7 @@ test('main browser entry registers both views and preserves node hooks', async t
     let launchReady = null;
     const opening = {setName: name => openingEvents.push(['name', name]), cover: () => openingEvents.push(['cover']), finish: () => openingEvents.push(['finish'])};
     const casts = [];
-    let progressView, progressOptions, realProgressFactory, studioView;
+    let progressView, progressOptions, realProgressFactory, studioView, doneNotifyOptions;
     const app = {
         registerExtension(extension) { extensions.push(extension); },
         graph: {extra: {freevideo_studio: true}, _nodes: [], getNodeById() {}},
@@ -90,7 +91,7 @@ test('main browser entry registers both views and preserves node hooks', async t
         notifyCompatibility: async () => { compatibilityChecks++; },
         startUpdateChecks: () => { updateChecks++; },
         startWhiteboxWorker: () => ({stop() {}}),
-        startDoneNotify: () => { doneNotifyStarts++; }, askDesktopPermission: () => {},
+        startDoneNotify: options => { doneNotifyStarts++; doneNotifyOptions = options; },
         installNavigation: callback => installed.push(callback),
         refreshNavigation: () => refreshed++, preferredView: () => rememberedView,
         beginWorkspaceRestore: () => { openingEvents.push(['begin']); return opening; }, finishWorkspaceRestore: () => { restoreReleases++; }, waitForLauncherRestore: () => launchReady,
@@ -123,7 +124,7 @@ test('main browser entry registers both views and preserves node hooks', async t
             .replace("import { notifyCompatibility } from './compatibility.js';", 'const {notifyCompatibility} = globalThis.__freevideoEntryTest;')
             .replace("import { startWhiteboxWorker } from './whitebox_worker.js';", 'const {startWhiteboxWorker} = globalThis.__freevideoEntryTest;')
             .replace("import { startUpdateChecks } from './updates.js';", 'const {startUpdateChecks} = globalThis.__freevideoEntryTest;')
-            .replace("import { startDoneNotify, askDesktopPermission, DESKTOP_SETTING } from './done_notify.js';", 'const {startDoneNotify,askDesktopPermission} = globalThis.__freevideoEntryTest; const DESKTOP_SETTING = "FreeVideo.DoneNotify.Desktop";')
+            .replace("import { startDoneNotify, askDesktopPermission, DESKTOP_SETTING } from './done_notify.js';", 'const {startDoneNotify} = globalThis.__freevideoEntryTest; const askDesktopPermission = (...args) => globalThis.__permissionAsks.push(args); const DESKTOP_SETTING = "FreeVideo.DoneNotify.Desktop";')
             .replace("import { attachReferencePicker, referenceItems, syncReferencePrompt, referenceInputs, mediaRows } from './prompt_references.js';", 'const {attachReferencePicker,referenceItems,syncReferencePrompt,referenceInputs,mediaRows} = globalThis.__freevideoEntryTest;')
             .replace("import { expandCast } from './cast_mention.js';", 'const {expandCast} = globalThis.__freevideoEntryTest;')
             .replace("import { outputDownloadURL } from './output_download.js';", 'const {outputDownloadURL} = globalThis.__freevideoEntryTest;')
@@ -152,6 +153,41 @@ test('main browser entry registers both views and preserves node hooks', async t
         assert.equal(compatibilityChecks, 1);
         assert.equal(updateChecks, 1);
         assert.equal(doneNotifyStarts, 1);
+
+        await t.test('desktop notification uses the registered default without overwriting stored opt-outs', () => {
+            const setting = extension.settings.find(row => row.id === 'FreeVideo.DoneNotify.Desktop');
+            assert.equal(setting.defaultValue, true);
+            assert.equal(typeof setting.onChange, 'function', 'turning the setting on is a user request');
+            globalThis.__permissionAsks.length = 0;
+            setting.onChange(true, undefined);
+            setting.onChange(true, true);
+            setting.onChange(false, true);
+            assert.equal(globalThis.__permissionAsks.length, 0, 'registration and unrelated changes never ask');
+            setting.onChange(true, false);
+            assert.equal(globalThis.__permissionAsks.length, 1, 'switching from off to on asks once');
+            assert.equal(doneNotifyOptions.desktop(), true, 'missing values use the new default');
+            // ComfyUI keeps explicit values separately and get() uses value ?? default.
+            // Registration must not write true over a previously stored false.
+            const values = new Map();
+            app.extensionManager = {setting: {get: key => values.get(key) ?? setting.defaultValue}};
+            app.ui = {settings: {getSettingValue: () => true}};
+            assert.equal(doneNotifyOptions.desktop(), true);
+            assert.equal(values.size, 0, 'an untouched default is not persisted');
+            values.set(setting.id, false);
+            assert.equal(doneNotifyOptions.desktop(), false, 'modern false wins over legacy true');
+            assert.equal(values.get(setting.id), false);
+            app.extensionManager.setting.get = () => undefined;
+            app.ui.settings.getSettingValue = () => false;
+            assert.equal(doneNotifyOptions.desktop(), false, 'legacy false is also preserved');
+            app.ui.settings.getSettingValue = () => undefined;
+            assert.equal(doneNotifyOptions.desktop(), true);
+            app.graph._nodes.push({type: 'KSampler'});
+            assert.equal(doneNotifyOptions.isFreeVideoWorkflow(), false);
+            app.graph._nodes.push({comfyClass: 'FreeVideoGenerate'});
+            assert.equal(doneNotifyOptions.isFreeVideoWorkflow(), true);
+            app.graph._nodes.length = 0;
+            delete app.extensionManager; delete app.ui;
+        });
 
         class GenerateNode {
             constructor() {

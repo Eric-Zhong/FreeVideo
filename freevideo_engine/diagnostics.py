@@ -41,12 +41,13 @@ PATH_KEYS = frozenset(('base', 'checkpoint', 'encoder', 'output', 'directory',
 ABSOLUTE_PATH = re.compile(
     # The preceding character guard prevents URL slashes from being treated
     # as local paths while still matching a drive path after prose such as
-    # ``at C:\\Users\\...`` or a quoted traceback location.
+    # ``at C:\\Users\\...`` or a quoted traceback location.  A slash followed by
+    # whitespace is prose (``8.0 / SM80``), not the start of a path.
     # Consume explicit relative paths too, spaces included, so an interior
     # slash (after e.g. a hyphen) cannot subsequently be mistaken for an
     # absolute path. Only our own ``./setup.sh`` command stays as written.
     r'''(?<![A-Za-z0-9_:/])(?:(?P<command>\./setup\.sh(?![\w/\\-]|\.\w))|\.{1,2}/[^"'<>;\r\n,\)\]}]*|'''
-    r'''(?:(?:[A-Za-z]:[\\/])|(?:\\\\[^\\/\s"'<>]+[\\/])|/(?!/))[^"'<>;\r\n,\)\]}]*)''')
+    r'''(?:(?:[A-Za-z]:[\\/])|(?:\\\\[^\\/\s"'<>]+[\\/])|/(?![/\s]))[^"'<>;\r\n,\)\]}]*)''')
 
 
 class Redactor:

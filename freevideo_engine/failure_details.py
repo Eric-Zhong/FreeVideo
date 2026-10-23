@@ -558,9 +558,10 @@ def launcher_failure(value, *, zh=False, other_disk=False, disk_name='', can_rep
          ('Update the NVIDIA driver to version 580 or newer, restart the computer, then click "Retry installation".',
           '请将 NVIDIA 显卡驱动更新到 580 或更新版本，重启电脑后点击“重试安装”。')),
         (r'CUDA_ARCH_UNSUPPORTED', 'gpu-architecture',
-         ('This GPU lacks the required compute support', '这张显卡不满足当前计算要求'),
-         ('The detected GPU and compute capability are shown below. The CUDA runtime requires native BF16 computation (SM80 or newer). Use a compatible GPU; changing the driver does not change its hardware capability.',
-          '下方是这张显卡的信息。FreeVideo 需要较新的显卡，更新驱动无法解决。')),
+         ('This GPU is not supported', '这张显卡不受支持'),
+         ('FreeVideo requires a GPU with compute capability 8.0 or higher, such as an NVIDIA GeForce RTX 30 series card or newer. '
+          'This requirement does not depend on the amount of VRAM, and a driver update cannot change it.',
+          'FreeVideo 需要计算能力 8.0 及以上的显卡，例如 NVIDIA GeForce RTX 30 系列及更新型号。这一要求与显存大小无关，更新驱动也无法改变。')),
         (r'CUDA_CAPABILITY_UNKNOWN', 'gpu-detection',
          ('GPU information could not be read', '未能读取显卡信息'),
          ('Retry hardware detection. If it still fails, export the report; it includes the GPU identity and the raw driver query.',
@@ -666,6 +667,12 @@ def launcher_failure(value, *, zh=False, other_disk=False, disk_name='', can_rep
                 # The launcher's failure card shows the action only when there is no detail, so the
                 # instruction goes under the detected driver instead of being hidden by it.
                 return dict(title=title[zh], detail=detail + '\n' + action[zh], action='', kind=kind)
+            if kind == 'gpu-architecture':
+                found = re.search(r'\[CUDA_ARCH_UNSUPPORTED\]\s+(.+?)\s+\(SM\w+; compute capability ([\d.]+);', text)
+                if found:
+                    model, capability = found.groups()
+                    detail = ('检测到：%s，计算能力 %s' if zh else 'Detected: %s, compute capability %s') % (model, capability)
+                    return dict(title=title[zh], detail=detail + '\n' + action[zh], action='', kind=kind)
             return dict(title=title[zh], detail=detail, action=action[zh], kind=kind)
     # Validation messages are already actionable. Show the cause, not a stack
     # trace or a guessed hardware diagnosis, and leave long details expandable.

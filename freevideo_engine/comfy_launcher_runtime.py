@@ -169,7 +169,7 @@ def nearby_comfy(selected):
     """
     try:
         for parent in (selected, *list(selected.parents)[:3]):
-            if _is_comfy_root(parent):
+            if _is_comfy_root(parent) or _is_comfy_root(parent / 'ComfyUI'):
                 return parent.name
         for child in sorted(p for p in selected.iterdir() if p.is_dir())[:200]:
             if _is_comfy_root(child) or _is_comfy_root(child / 'ComfyUI'):

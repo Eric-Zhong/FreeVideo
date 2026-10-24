@@ -344,6 +344,15 @@ function onScreen(element) {
 // canvas: inside the window, sized, and invisible. Look at what is on top of
 // its view switch; a dialog, menu, toast or this card only passes over it.
 const OVERLAYS = 'dialog, [role="dialog"], [role="menu"], .p-dialog-mask, .p-overlay-mask, .p-toast, .litecontextmenu, .fv-health';
+// Why a dialog that is open does not count as on screen, for the details of the report: which test it fails
+// and the box and window it was measured against (no page content).
+function whyOffScreen(element) {
+    const style = getComputedStyle(element), box = element.getBoundingClientRect();
+    const reason = !element.isConnected ? 'not in the page' : element.hidden ? 'hidden attribute'
+        : style.display === 'none' ? 'display: none' : style.visibility === 'hidden' ? 'visibility: hidden'
+        : Number(style.opacity) === 0 ? 'opacity: 0' : !(box.width > 0 && box.height > 0) ? 'no size' : 'outside the window';
+    return `${reason}; box ${Math.round(box.left)},${Math.round(box.top)} ${Math.round(box.width)}x${Math.round(box.height)}; window ${innerWidth}x${innerHeight}`;
+}
 // A layer hides the toolbar only if it paints over it. ComfyUI's dimming
 // backdrops and click-away layers (a dialog's shade, the help panel's) leave it
 // visible underneath, so they are not a fault.
@@ -397,7 +406,8 @@ function workspaceProblem(app) {
     // The editor shares the studio shell; either view replaces the floating toolbar.
     const studio = document.querySelector('dialog.fv-editor[open]') || document.querySelector('dialog.fv-studio[open]');
     if (studio) return onScreen(studio) ? null
-        : {text: t('The creative workspace is open but cannot be seen on the page.', '创作面板已经打开，但页面上看不到。'), advice: 'reload'};
+        : {text: t('The creative workspace is open but cannot be seen on the page.', '创作面板已经打开，但页面上看不到。'), advice: 'reload',
+            state: `${nameOf(studio)}: ${whyOffScreen(studio)}`};
     const bar = document.querySelector('.fv-view-navigation');
     if (!bar) return {text: t('The FreeVideo toolbar that opens the creative workspace is missing from the page.', '页面上没有打开创作面板的 FreeVideo 工具栏。'), advice: 'reload'};
     const cover = onScreen(bar) ? coveredBy(bar) : null;
@@ -477,7 +487,7 @@ function details(problems) {
         `ComfyUI frontend: ${window.__COMFYUI_FRONTEND_VERSION__ || 'unknown'}`,
         `FreeVideo UI: ${JSON.stringify(window.FreeVideoUI || {})}`,
         `Automatic reload: ${retried ? new Date(Number(retryRecord.at)).toISOString() : retryRecord ? 'not needed' : 'unavailable (no session storage)'}`,
-        '', 'Problems:', ...problems.flatMap(p => [`- ${p.text}`, ...(p.cover ? [`  covered by: ${p.cover}`] : [])]),
+        '', 'Problems:', ...problems.flatMap(p => [`- ${p.text}`, ...(p.cover ? [`  covered by: ${p.cover}`] : []), ...(p.state ? [`  state: ${p.state}`] : [])]),
         ...(checks.length ? ['', 'Load check:', ...checks.map(row => `- ${row}`)] : []),
         ...(cache.length ? ['', 'Browser cache:', ...cache.map(row => `- ${row}`)] : []),
         ...(before.length ? ['', 'Browser cache before the automatic reload:', ...before.map(row => `- ${row}`)] : []),

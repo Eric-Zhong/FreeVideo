@@ -1,37 +1,54 @@
 {
   "schema": 1,
-  "product_version": "0.4.20",
+  "product_version": "0.4.21",
   "en": {
-    "summary": "One continuous shot can now be split into up to 8 parts; generated pictures can be downloaded directly and the path of a video can be copied.",
+    "summary": "Agent image tasks can place characters in a scene by position, size and facing; the page check no longer reports a covered toolbar behind ComfyUI dialogs.",
     "changes": [
-      "Long videos: one continuous shot can now be split into up to 8 parts instead of 5. The line below the duration in the creation panel states that each run makes one continuous shot and points to Edit or Autopilot for a storyboard; a length that needs more parts than allowed is stopped before it is submitted, and a refusal at submission is shown as a plain notice instead of an unknown error.",
-      "Reference video: fixed generation failing when a reference video is combined with a non-default upscale factor such as 1.5x.",
-      "Pictures and videos: picture cards in the Autopilot chat and the enlarged picture view have a Download button; results in the library and the creation panel have Copy path.",
-      "The desktop notification for a finished generation is now on by default: permission is requested once, the first time Generate is clicked; it stays off for anyone who has turned it off.",
-      "Edit: while the generation service has not answered, the generation bar stays visible with Generate dimmed; when the automatic checks get no answer, the status line shows \"Generation unavailable\" with a retry link, which checks again when clicked.",
-      "The edits, imports, characters, Agent conversations and Agent jobs lists now end with a line such as \"N edits could not be read\" when some records cannot be read.",
-      "Windows graphics cards with 8 to 12 GB of video memory: the first pass of FP8 two-pass videos on RTX 40 and 50 series cards, and the second pass of int8 videos longer than 10 seconds on 12 GB cards, now run attention 8 heads at a time instead of 4, within the planned memory budget. LoRA, Linux and Mac are unchanged. The same seed can give a slightly different video.",
-      "Retry after one-time errors: a second pass that stops with a one-time CUDA error resumes once from the finished first pass instead of failing or repeating it; on a Mac, a pass that stops with a Metal command-buffer error is retried once with smaller memory partitions. Failure reports name the machine, settings and retry result, and report ids stay retrievable after the service restarts.",
-      "Decoding the same request with the same seed now writes identical pixels every time. Compared with earlier versions, the same seed can give slightly different pixels.",
-      "The card shown for an unsupported graphics card now names the detected card and its compute capability, and states that FreeVideo needs compute capability 8.0 or higher (GeForce RTX 30 series or newer) regardless of VRAM. Error text no longer replaces a slash inside a sentence with a path placeholder."
+      "Agent images: an image task can take a scene picture and one to three characters (character card or picture) with a position, a height, a full-body or half-body framing and a facing direction. The picture is generated with the scene as the first reference instead of a pasted collage, and the result can be used directly as a first frame.",
+      "Page check: the FreeVideo toolbar is no longer reported as covered when ComfyUI shows a dimming or click-away layer over it, such as the Templates dialog on a first start or the Help panel; the details now name what covers the toolbar."
     ]
   },
   "zh": {
-    "summary": "一个连续镜头最多可分 8 段；生成的图片可以直接下载，作品可以复制路径。",
+    "summary": "Agent 图片任务可按位置、大小和朝向把人物放进场景；页面检查不再因 ComfyUI 的对话框遮罩报告工具栏被遮挡。",
     "changes": [
-      "长视频：一个连续镜头最多可分 8 段（原为 5 段）。创作面板时长下方写明每次生成一个连续镜头，有分镜剧本时可转到剪辑视图或 AI 全自动；所需段数超过上限时在提交前提示缩短时长，提交时仍被拒绝也显示为普通提示，不再显示为未知错误。",
-      "参考视频：修复参考视频配合 1.5 倍等非默认放大倍数时生成失败。",
-      "图片和作品：AI 全自动对话中的图片卡和放大查看窗增加“下载”；作品库和创作面板的结果按钮增加“复制路径”。",
-      "生成完成的桌面通知改为默认开启：第一次点生成时请求一次通知权限；已经关闭通知的保持关闭。",
-      "剪辑视图：生成服务暂时没有回答时，生成栏不再被藏起，“生成”按钮置灰；几次自动检查都没有回答时，状态行显示“生成服务暂不可用 · 重试”，点击后重新检查。",
-      "剪辑、已导入、角色、Agent 对话和 Agent 任务列表中有记录无法读取时，列表末尾写明“另有 N 个……无法读取”。",
-      "Windows 上显存 8–12 GB 的显卡：RTX 40 和 50 系列 FP8 两遍视频的第一遍，以及 12 GB 显卡上超过 10 秒的 int8 视频的第二遍，每次计算的注意力头由 4 个增加到 8 个，显存占用保持在计划预算内。LoRA、Linux 和 Mac 不变。同一个种子生成的视频可能略有不同。",
-      "一次性错误自动重试：第二遍遇到一次性的 CUDA 错误时，自动从已完成的第一遍续跑一次，不再整个请求失败或重做第一遍；Mac 上采样阶段遇到 Metal 命令缓冲区错误时，会用更小的内存分块重试一次。失败报告写明机器、设置和重试结果，报告编号在服务重启后仍可取回。",
-      "同一请求、同一种子，解码出的画面每次逐位一致。与之前的版本相比，同一种子的画面可能有细微差别。",
-      "不受支持的显卡的提示卡现在写出检测到的显卡和计算能力，并说明 FreeVideo 需要计算能力 8.0 及以上的显卡（GeForce RTX 30 系列及更新），与显存大小无关。错误文字中句子里的斜杠不再被替换成路径占位符。"
+      "Agent 图片：图片任务可以指定一张场景图和一至三个人物（角色卡或图片），并设定位置、人物高度、全身或半身景别和朝向。图片以场景为第一参考图生成，不再拼贴粘图，结果可直接作首帧。",
+      "页面检查：ComfyUI 的调暗或点击遮罩（首次启动的模板对话框、帮助面板等）盖在 FreeVideo 工具栏上时，不再报告工具栏被遮挡；诊断详情会写出遮挡工具栏的元素。"
     ]
   },
   "history": [
+    {
+      "product_version": "0.4.20",
+      "en": {
+        "summary": "One continuous shot can now be split into up to 8 parts; generated pictures can be downloaded directly and the path of a video can be copied.",
+        "changes": [
+          "Long videos: one continuous shot can now be split into up to 8 parts instead of 5. The line below the duration in the creation panel states that each run makes one continuous shot and points to Edit or Autopilot for a storyboard; a length that needs more parts than allowed is stopped before it is submitted, and a refusal at submission is shown as a plain notice instead of an unknown error.",
+          "Reference video: fixed generation failing when a reference video is combined with a non-default upscale factor such as 1.5x.",
+          "Pictures and videos: picture cards in the Autopilot chat and the enlarged picture view have a Download button; results in the library and the creation panel have Copy path.",
+          "The desktop notification for a finished generation is now on by default: permission is requested once, the first time Generate is clicked; it stays off for anyone who has turned it off.",
+          "Edit: while the generation service has not answered, the generation bar stays visible with Generate dimmed; when the automatic checks get no answer, the status line shows \"Generation unavailable\" with a retry link, which checks again when clicked.",
+          "The edits, imports, characters, Agent conversations and Agent jobs lists now end with a line such as \"N edits could not be read\" when some records cannot be read.",
+          "Windows graphics cards with 8 to 12 GB of video memory: the first pass of FP8 two-pass videos on RTX 40 and 50 series cards, and the second pass of int8 videos longer than 10 seconds on 12 GB cards, now run attention 8 heads at a time instead of 4, within the planned memory budget. LoRA, Linux and Mac are unchanged. The same seed can give a slightly different video.",
+          "Retry after one-time errors: a second pass that stops with a one-time CUDA error resumes once from the finished first pass instead of failing or repeating it; on a Mac, a pass that stops with a Metal command-buffer error is retried once with smaller memory partitions. Failure reports name the machine, settings and retry result, and report ids stay retrievable after the service restarts.",
+          "Decoding the same request with the same seed now writes identical pixels every time. Compared with earlier versions, the same seed can give slightly different pixels.",
+          "The card shown for an unsupported graphics card now names the detected card and its compute capability, and states that FreeVideo needs compute capability 8.0 or higher (GeForce RTX 30 series or newer) regardless of VRAM. Error text no longer replaces a slash inside a sentence with a path placeholder."
+        ]
+      },
+      "zh": {
+        "summary": "一个连续镜头最多可分 8 段；生成的图片可以直接下载，作品可以复制路径。",
+        "changes": [
+          "长视频：一个连续镜头最多可分 8 段（原为 5 段）。创作面板时长下方写明每次生成一个连续镜头，有分镜剧本时可转到剪辑视图或 AI 全自动；所需段数超过上限时在提交前提示缩短时长，提交时仍被拒绝也显示为普通提示，不再显示为未知错误。",
+          "参考视频：修复参考视频配合 1.5 倍等非默认放大倍数时生成失败。",
+          "图片和作品：AI 全自动对话中的图片卡和放大查看窗增加“下载”；作品库和创作面板的结果按钮增加“复制路径”。",
+          "生成完成的桌面通知改为默认开启：第一次点生成时请求一次通知权限；已经关闭通知的保持关闭。",
+          "剪辑视图：生成服务暂时没有回答时，生成栏不再被藏起，“生成”按钮置灰；几次自动检查都没有回答时，状态行显示“生成服务暂不可用 · 重试”，点击后重新检查。",
+          "剪辑、已导入、角色、Agent 对话和 Agent 任务列表中有记录无法读取时，列表末尾写明“另有 N 个……无法读取”。",
+          "Windows 上显存 8–12 GB 的显卡：RTX 40 和 50 系列 FP8 两遍视频的第一遍，以及 12 GB 显卡上超过 10 秒的 int8 视频的第二遍，每次计算的注意力头由 4 个增加到 8 个，显存占用保持在计划预算内。LoRA、Linux 和 Mac 不变。同一个种子生成的视频可能略有不同。",
+          "一次性错误自动重试：第二遍遇到一次性的 CUDA 错误时，自动从已完成的第一遍续跑一次，不再整个请求失败或重做第一遍；Mac 上采样阶段遇到 Metal 命令缓冲区错误时，会用更小的内存分块重试一次。失败报告写明机器、设置和重试结果，报告编号在服务重启后仍可取回。",
+          "同一请求、同一种子，解码出的画面每次逐位一致。与之前的版本相比，同一种子的画面可能有细微差别。",
+          "不受支持的显卡的提示卡现在写出检测到的显卡和计算能力，并说明 FreeVideo 需要计算能力 8.0 及以上的显卡（GeForce RTX 30 系列及更新），与显存大小无关。错误文字中句子里的斜杠不再被替换成路径占位符。"
+        ]
+      }
+    },
     {
       "product_version": "0.4.19",
       "en": {
@@ -248,60 +265,6 @@
           "升级：旧版本留在标签页中的 FreeVideo 工作流会换成当前版本，并保留提示词、尺寸、时长、种子、素材和 LoRA。",
           "Agent：拼接的成片保存到“我的作品”，任务卡可以打开。",
           "安装：Windows 和 Linux 安装包变小；提示词增强模型也可以从魔搭下载；GPU 加速组件构建时，名称和说明保持不变。"
-        ]
-      }
-    },
-    {
-      "product_version": "0.4.12",
-      "en": {
-        "summary": "Preview white-model scenes for Autopilot, LoRA compatibility checks and drag-to-reorder, clearer failure messages, deleting edits, a faster start for a busy machine, and a Medium level that samples two passes.",
-        "changes": [
-          "Autopilot: an optional white-model preview, with ready-made scenes, shows the scene before the video is made; the entry showcase has an example.",
-          "LoRA: a compatibility check before generating, and LoRAs can be reordered by dragging.",
-          "Failure messages: submission, queue and browser-extension failures share one layout and say what to do next; failed requests can be packaged with Export report or Submit to GitHub.",
-          "Editor: an edit can be deleted, an empty untouched edit is discarded, and reopening an edit restores its cover and shows its finishing stage; continuations are queued on the server.",
-          "Characters: each character carries a sheet of all views plus a face close-up; a picture that cannot be read is refused with a message on its own tile.",
-          "Medium: samples two passes from a larger first pass; Max runs all 20 steps without a cache.",
-          "Install: the GPU acceleration build has a visible share of the progress, the model line stays steady while groups download, and torch shows as Runtime components.",
-          "Downloads: before a download starts, the launcher, the page and the editor say what it is and how long it takes.",
-          "Guide: the first-run guide shows where to add reference images and first or last frames, the length field shows the part limit, and the Chinese interface links a user guide beside the guide in Settings.",
-          "Reusing reference pictures and clips when only the prompt changes skips encoding them again; on a busy machine the small CPU table work of loading runs on one thread.",
-          "Mac: a device that cannot continue a video refuses lengths over one block up front.",
-          "The feedback button opens the issue form."
-        ]
-      },
-      "zh": {
-        "summary": "AI 全自动新增白模预览场景，LoRA 兼容性检查和拖动排序，失败提示更清楚，可以删除剪辑，繁忙的机器上启动更快，标准档改为两遍采样。",
-        "changes": [
-          "AI 全自动：可选的白模预览和现成场景，在生成视频前先看到场景；入口展示里有示例。",
-          "LoRA：生成前做兼容性检查，LoRA 可以拖动排序。",
-          "失败提示：提交、排队和浏览器扩展的失败用同一种版式，并说明下一步该做什么；失败的请求可以打包为导出报告或提交到 GitHub。",
-          "编辑器：可以删除剪辑，没改动的空剪辑自动丢弃；重新打开剪辑会恢复封面并显示收尾阶段；续接在服务端排队。",
-          "角色：每个角色带有全部视角的角色图和脸部特写；读不出来的图片会被拒绝，并在对应的格子上给出提示。",
-          "标准档：从更大的第一遍起采样两遍；极致档跑满 20 步且不使用缓存。",
-          "安装：GPU 加速组件的构建在进度中占有可见的份额，模型下载分组并行时进度行保持稳定，torch 显示为“运行组件”。",
-          "下载：开始下载前，启动器、页面和编辑器会说明这是什么下载、需要多久。",
-          "指引：首次指引新增一步，说明在哪里添加参考图和首帧、尾帧；时长栏直接显示分段上限；中文界面在设置里可以打开使用说明。",
-          "只改提示词时，参考图和片段不再重复编码；机器繁忙时，加载过程中的小型 CPU 表运算改为单线程。",
-          "Mac：不能续接视频的设备会在一开始就拒绝超过一个分段的长度。",
-          "反馈按钮直接打开问题表单。"
-        ]
-      }
-    },
-    {
-      "product_version": "0.4.11",
-      "en": {
-        "summary": "Fixes requests being rejected with a frame count error, and LoRAs with extra parts generating on the int8 build.",
-        "changes": [
-          "Generating from a workflow or a restored tab where Total frames holds a number that is not a frame count is no longer rejected with a frame count error; the number is read as the duration.",
-          "int8: a LoRA that also contains modulation parts no longer stops the generation; those parts are skipped one by one and the number skipped appears in the report."
-        ]
-      },
-      "zh": {
-        "summary": "修复请求被帧数错误拒绝的问题，并让带额外部分的 LoRA 能在 int8 版本上正常生成。",
-        "changes": [
-          "用 Total frames 里填的不是帧数的工作流或恢复的标签页生成时，不再被帧数错误拒绝，这个数会按时长读取。",
-          "int8：带调制部分的 LoRA 不再让生成中断，这些部分会逐个跳过，跳过的数量写进报告。"
         ]
       }
     }

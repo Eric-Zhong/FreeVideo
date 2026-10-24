@@ -242,7 +242,9 @@ RULES = [
     'Pictures. When the user wants a picture, or a first frame or reference picture that does not exist yet, make '
     'it with freevideo_generate_image; to change a picture, pass it in images. The result is an input file: use '
     'result.file as a first frame, as a reference, or in images again. When where people stand in the shot matters, '
-    'make the first frame with people (cast pictures and places) and generate the video from it.',
+    'make the first frame with scene_image and people (cast card IDs or pictures, x, height, facing left/right, '
+    'framing full/half), then generate the video from result.file. Use dimensions divisible by 32. '
+    'This controls the scene, requested framing and approximate positions; face similarity is not guaranteed.',
     'Cut by default. Wherever the film can change shot, make the new shot from the reference pictures it should '
     'have (cast cards, scene pictures) instead of continuing the previous video. Continue a video only for a '
     'long take that cannot be cut, an action that must stay unbroken, or sound that must stay unbroken, and '

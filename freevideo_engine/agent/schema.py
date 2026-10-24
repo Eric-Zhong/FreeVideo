@@ -234,14 +234,20 @@ def image(*, local=False):
         seed=nullable(number(-2**63, 2**64 - 1, integer=True)),
         images=array({'oneOf': [FILE, obj(dict(file=FILE), ('file',))]}, high=4, description='Pictures to change '
             'or combine: input files, such as result.file of an earlier picture job. The prompt calls them image 1, image 2.'),
-        people=array(obj(dict(image=FILE, name=string(40), x=number(0, 1), height=number(.05, 1), feet=number(0, 1)),
-                         ('image',)), 1, 3, description='Makes a first frame with people standing where you say. image is '
-            "a full-body picture on a plain backdrop, such as a cast card's front picture. From 0 to 1: x is the person's "
-            'centre across the width (default 0.5), height their size (0.62) and feet where they stand down the height '
-            '(0.9). The prompt describes the scene, or scene_image shows it. Not together with images.'),
+        people=array(obj(dict(image=FILE, cast=CAST, name=string(40), x=number(0, 1), height=number(.05, 1),
+                              feet=number(0, 1), facing=enum(('left', 'right')),
+                              framing=enum(('full', 'half'), default='full')),
+                         oneOf=[{'required': ['image']}, {'required': ['cast']}]), 1, 3,
+            description="First frame with people near the places you say; faces may not match the pictures exactly. "
+            "x, height and feet run 0 to 1: x the centre across the width (0.5), height the visible figure's share of the frame "
+            "height (0.62; head to waist for half), feet the figure's lower edge from the top (the larger of 0.9 and height). "
+            "facing is left or right on screen. Not with images."),
         scene_image=FILE,
         **common()),
-        ('kind', 'prompt'), allOf=[{'if': {'required': ['width']}, 'then': {'required': ['height']}},
+        ('kind',), allOf=[{'if': {'not': {'required': ['scene_image']}}, 'then': {'required': ['prompt']}},
+               {'if': {'required': ['people']}, 'then': {'properties': {
+                   key: number(256, 2048, integer=True, multipleOf=32) for key in ('width', 'height')}}},
+               {'if': {'required': ['width']}, 'then': {'required': ['height']}},
                {'if': {'required': ['height']}, 'then': {'required': ['width']}},
                {'if': {'required': ['aspect']},
                 'then': {'not': {'anyOf': [{'required': ['width']}, {'required': ['height']}]}}}],
@@ -1180,6 +1186,9 @@ def cross_issues(schema, value, path):
             bad('images', 'omitted when people is supplied', value['images'])
         if value.get('scene_image') and not value.get('people'):
             bad('scene_image', 'omitted unless people is supplied', value['scene_image'])
+        for i, person in enumerate(value.get('people', [])):
+            if 'feet' in person and person['feet'] < person.get('height', .62):
+                bad('people/%d/feet' % i, 'at least the figure height, so the figure fits inside the frame', person['feet'])
     if kind == 'generate':
         if value.get('continue_from') and isinstance(value.get('media'), dict) and any(
                 v is not None for k, v in value['media'].items() if k != 'references'):
@@ -1471,7 +1480,7 @@ TOOL_KINDS = dict(freevideo_generate='generate', freevideo_assemble='assemble',
 
 
 SESSION_ARGUMENT = dict(type='string', pattern='^s[0-9a-f]{12}$',
-    description='Work session for this call; omit to use your latest one.')
+    description='Work session; omit for your latest.')
 
 
 SHAPE_MIN_BYTES = 400

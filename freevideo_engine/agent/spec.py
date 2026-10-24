@@ -269,13 +269,15 @@ def normalize(value, *, port=None):
     elif kind == 'image':
         width, height = ((value['width'], value['height']) if 'width' in value else
                          contract.IMAGE_ASPECTS[value.get('aspect', '1:1')])
-        result.update(prompt=value['prompt'], width=width, height=height,
+        result.update(prompt=value.get('prompt', ''), width=width, height=height,
                       images=[item if isinstance(item, str) else item['file'] for item in value.get('images', [])])
         if value.get('seed') is not None:
             result['seed'] = value['seed']
         if value.get('people'):
-            result['people'] = [dict(image=person['image'], x=person.get('x', .5), height=person.get('height', .62),
-                                     feet=person.get('feet', .9), **({'name': person['name']} if person.get('name') else {}))
+            result['people'] = [dict({k: person[k] for k in ('image', 'cast', 'name', 'facing') if k in person},
+                                     x=person.get('x', .5), height=person.get('height', .62),
+                                     framing=person.get('framing', 'full'),
+                                     feet=person.get('feet', max(.9, person.get('height', .62))))
                                 for person in value['people']]
             if value.get('scene_image'):
                 result['scene_image'] = value['scene_image']

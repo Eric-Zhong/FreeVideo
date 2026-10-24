@@ -6,6 +6,8 @@ settings and timings. No prompt, reference or picture is read here.
 import json
 import re
 
+from .exit_diagnostics import OWN_MEMORY_KEYS
+
 # The summary travels in a GitHub page address, which has to stay short.
 MAX_DIAGNOSTICS = 3000
 # Anything that looks like a file location or a long secret-like token is replaced.
@@ -45,6 +47,9 @@ def summary(report, machine=None):
         memory = planning[-1].get('system_memory') if isinstance(planning, list) and planning and isinstance(planning[-1], dict) else None
         if isinstance(memory, dict):
             memory = {k: memory[k] for k in MEMORY_KEYS if type(memory.get(k)) is int}
+            own = planning[-1].get('own_memory')
+            if isinstance(own, dict):
+                memory.update({k: own[k] for k in OWN_MEMORY_KEYS if type(own.get(k)) is int})
             if memory:
                 out['memory'] = memory
         errors = analysis.get('errors')

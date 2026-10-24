@@ -751,6 +751,10 @@ def planning(rows):
             item[key] = numbers(row.get(key), HARDWARE_MEMORY)
         item['system_memory'] = numbers(row.get('system_memory'),
             ('total_bytes', 'available_bytes', 'physical_available_bytes', 'commit_available_bytes'))
+        from .exit_diagnostics import OWN_MEMORY_KEYS
+        own = numbers(row.get('own_memory'), OWN_MEMORY_KEYS)
+        if own:
+            item['own_memory'] = own
         for key in ('budget_bytes', 'reserve_bytes'):
             item[key] = numbers(row.get(key), ('gpu', 'ram'))
         item['resource_error'] = numbers(row.get('resource_error'), tuple(resource + '_' + field

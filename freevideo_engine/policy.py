@@ -622,6 +622,22 @@ class ResourceBudgetError(ValueError):
         lines.append('Available memory includes validated idle-cache credit, if present. Resolution, frames and steps were not reduced.')
         super().__init__('\n'.join(lines))
 
+    def add_own_memory(self, own):
+        """Say how much of the physical RAM already taken is FreeVideo's own."""
+        self.details.update(own)
+        parts = []
+        if 'own_private_working_set_bytes' in own:
+            partial = own.get('own_unreadable_processes', 0)
+            parts.append('FreeVideo\'s generation processes hold %s%.2f GiB of private physical RAM (%d processes%s)' %
+                         ('at least ' if partial else '', own['own_private_working_set_bytes'] / GiB,
+                          own.get('own_processes', 0), ', %d unreadable' % partial if partial else ''))
+        if 'resident_private_working_set_bytes' in own:
+            parts.append('FreeVideo\'s resident worker holds %.2f GiB' % (own['resident_private_working_set_bytes'] / GiB))
+        if 'host_private_working_set_bytes' in own:
+            parts.append('the largest process above the generation process holds %.2f GiB' % (own['host_private_working_set_bytes'] / GiB))
+        if parts:
+            parts[0] = parts[0][0].upper() + parts[0][1:]
+            self.args = ('%s\n%s.' % (self.args[0], '; '.join(parts)),)
 
 
 def feasible_alternatives(hardware, canvas, **options):

@@ -19,6 +19,8 @@ _SYSTEM_STATUS = {
 }
 _CRASH_PREFIXES = (0xC0000000, 0x80000000)
 _FIELDS = ('physical_available_bytes', 'commit_available_bytes', 'commit_limit_bytes', 'total_bytes')
+OWN_MEMORY_KEYS = ('own_private_working_set_bytes', 'own_processes', 'own_unreadable_processes',
+                   'host_private_working_set_bytes', 'resident_private_working_set_bytes')
 
 
 def _count(value):
@@ -56,6 +58,56 @@ def memory_sample(pid=None):
     except Exception:
         pass
     return {key: sample[key] for key in sample if sample[key] is not None}
+
+
+def own_memory(pid=None):
+    """Physical RAM held by this process tree and by the largest process above it (Windows).
+
+    A refusal says how much memory the system had left; this says how much of
+    what was taken is FreeVideo's. The numbers are private working sets, which
+    exclude mapped files, so they can be compared with free physical RAM. The
+    tree is the generation process and its children; the resident worker is
+    started by the host and is added by the caller from its own status. The
+    host figure is the largest of up to four ancestors (a launcher gate is
+    small, the program that started it is not). Processes that cannot be read
+    are counted, never taken as zero; if the process itself cannot be read
+    nothing is returned. Other platforms give nothing; the function never raises.
+    """
+    if not windows():
+        return {}
+    pid = os.getpid() if pid is None else pid
+    result = {}
+    try:
+        from .win32 import ProcessMemory, processes, process_memory
+        reading = ProcessMemory().sample(pid)
+        unreadable = reading.get('unreadable_memory_pids') or []
+        if not reading.get('processes') or pid in unreadable:
+            return {}
+        result.update(own_private_working_set_bytes=reading['private_working_set_bytes'],
+                      own_processes=reading['processes'])
+        if unreadable:
+            result['own_unreadable_processes'] = len(unreadable)
+    except Exception:
+        return {}
+    try:
+        parents = processes()
+        seen, node, largest = {pid}, parents.get(pid), None
+        for _ in range(4):
+            if not node or node in seen:
+                break
+            seen.add(node)
+            try:
+                row = process_memory(node)
+            except Exception:
+                row = None
+            if row and _count(row.get('private_working_set_bytes')) is not None:
+                largest = max(largest or 0, row['private_working_set_bytes'])
+            node = parents.get(node)
+        if largest is not None:
+            result['host_private_working_set_bytes'] = largest
+    except Exception:
+        pass
+    return {key: value for key, value in result.items() if _count(value) is not None}
 
 
 def exit_reading(code, *, requested_stop=False, system=None):

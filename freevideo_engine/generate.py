@@ -287,6 +287,15 @@ def automatic_profile(args, canvas, *, stage, evidence, descriptor=None, environ
                        mapped_bytes=mapped if type(mapped) is int else None,
                        commit_available_bytes=commit if type(commit) is int else None)
         except ResourceBudgetError as error:
+            from .exit_diagnostics import own_memory
+            own = dict(own_memory())
+            resident = ((state or {}).get('memory') or {})
+            if (resident.get('guard_metric') == 'tree private working set'
+                    and type(resident.get('guard_bytes')) is int and resident['guard_bytes'] >= 0):
+                own['resident_private_working_set_bytes'] = resident['guard_bytes']
+            if own:
+                error.add_own_memory(own)
+                row['own_memory'] = own
             row.update(status='rejected', resource_error=error.details)
             error.resource_planning = evidence
             impossible_capacity = any(error.details[name+'_capacity_bytes'] - error.details[name+'_reserve_bytes']

@@ -228,8 +228,7 @@ def vlm(*, local=False):
 
 def image(*, local=False):
     return obj(dict(kind={'const': 'image', 'type': 'string'},
-        prompt=dict(type='string', minLength=1, maxLength=2000,
-                    description='Scene description; required unless scene_image supplies the scene.'),
+        prompt=dict(type='string', minLength=1, maxLength=2000),
         width=number(256, 2048, integer=True), height=number(256, 2048, integer=True),
         aspect=enum(IMAGE_ASPECTS, description='Instead of width and height; 1:1 when all three are omitted.'),
         seed=nullable(number(-2**63, 2**64 - 1, integer=True)),
@@ -239,11 +238,10 @@ def image(*, local=False):
                               feet=number(0, 1), facing=enum(('left', 'right')),
                               framing=enum(('full', 'half'), default='full')),
                          oneOf=[{'required': ['image']}, {'required': ['cast']}]), 1, 3,
-            description='First frame with people near the places you say; faces may not match the pictures exactly. Give image (an input '
-            'file) or cast (a character card ID; its front picture is used). From 0 to 1: x is the '
-            "centre across the width (default 0.5), height the visible figure's share of the frame height (0.62; head to waist "
-            "for half), feet where the figure's lower edge sits, from the top (default: the larger of 0.9 and height). facing is left or right on screen. "
-            'Width and height: multiples of 32. Not with images.'),
+            description="First frame with people near the places you say; faces may not match the pictures exactly. "
+            "x, height and feet run 0 to 1: x the centre across the width (0.5), height the visible figure's share of the frame "
+            "height (0.62; head to waist for half), feet the figure's lower edge from the top (the larger of 0.9 and height). "
+            "facing is left or right on screen. Not with images."),
         scene_image=FILE,
         **common()),
         ('kind',), allOf=[{'if': {'not': {'required': ['scene_image']}}, 'then': {'required': ['prompt']}},
@@ -1482,7 +1480,7 @@ TOOL_KINDS = dict(freevideo_generate='generate', freevideo_assemble='assemble',
 
 
 SESSION_ARGUMENT = dict(type='string', pattern='^s[0-9a-f]{12}$',
-    description='Work session for this call; omit to use your latest one.')
+    description='Work session; omit for your latest.')
 
 
 SHAPE_MIN_BYTES = 400

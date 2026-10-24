@@ -50,6 +50,15 @@ export function createEditorGenbar(host, {state, t, actions, text = ''}) {
     input.dataset.fvGuide = 'editor-describe'; generate.dataset.fvGuide = 'editor-generate';
     for (const button of [generate, cancel, resume]) button.type = 'button';
     host.append(hint, note, description, generate, cancel, resume);
+    // The line's own "check again", shown whenever nothing else is said there.
+    const retryService = el('button', 'fv-ed-gen-retry', t('Generation unavailable · retry', '生成服务暂不可用 · 重试')); retryService.type = 'button';
+    let service = null;
+    retryService.onclick = () => { if (service && !service.checking) { retryService.disabled = true; service.retry(); } };
+    function showService() {
+        if (disposed || !service) return;
+        retryService.disabled = service.checking;
+        if (note.hidden) { note.replaceChildren(retryService); note.hidden = false; }
+    }
     // What this part will download first, above the bar like the studio's line above Generate.
     const assets = actions.assets ? createRequestAssets({t, api: actions.assets.api, request: () => actions.assets.query()}) : null;
     if (assets) host.prepend(assets.element);
@@ -95,7 +104,8 @@ export function createEditorGenbar(host, {state, t, actions, text = ''}) {
         queuedAt = text && queued ? progressKey() : null;
         clearTimeout(noteTimer); note.textContent = text || ''; note.hidden = !text;
         if (text && where) note.append(issueButton(t, () => ({where, message: text})));
-        if (text) noteTimer = setTimeout(() => { note.hidden = true; }, where ? 20000 : 6000);
+        if (text) noteTimer = setTimeout(() => { note.hidden = true; showService(); }, where ? 20000 : 6000);
+        else showService();
     }
     async function render() {
         if (disposed) return;
@@ -161,8 +171,8 @@ export function createEditorGenbar(host, {state, t, actions, text = ''}) {
         firstFrame.update(busy);
         references?.update(busy, busy ? undefined : actions.references.visible() || false);
         generate.textContent = t('Generate', '生成');
-        // Never disabled for a reason the press itself can explain or fix.
-        generate.disabled = busy || !!previewSelection;
+        // Never disabled for a reason the press itself can explain or fix; only until the server says it can generate.
+        generate.disabled = busy || !!previewSelection || !!actions.generationWaiting?.();
         resizeDescription();
         input.dispatchEvent(new Event('change'));
         generate.title = '';
@@ -236,7 +246,12 @@ export function createEditorGenbar(host, {state, t, actions, text = ''}) {
         if (event.type === 'selection' || event.type === 'record') render();
     });
     render();
-    return {element: host, say, downloadFailure, getText() { expand.commit(); return input.value; }, update(value) { status = value; render(); }, preview(selection) { previewSelection = selection; render(); }, setText(value) { input.value = value || ''; state.setRangeText(input.value); render(); },
+    return {element: host, say, downloadFailure,
+        service(value) {
+            service = value;
+            if (!value && note.contains(retryService)) { retryService.remove(); note.hidden = true; }
+            showService();
+        }, getText() { expand.commit(); return input.value; }, update(value) { status = value; render(); }, preview(selection) { previewSelection = selection; render(); }, setText(value) { input.value = value || ''; state.setRangeText(input.value); render(); },
         dispose() { disposed = true; ++serial; clearTimeout(noteTimer); clearTimeout(refNoticeTimer); unsubscribe(); resize?.disconnect(); expand.dispose(); references?.dispose(); assets?.dispose(); }};
 }
 

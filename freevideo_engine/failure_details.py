@@ -558,9 +558,10 @@ def launcher_failure(value, *, zh=False, other_disk=False, disk_name='', can_rep
          ('Update the NVIDIA driver to version 580 or newer, restart the computer, then click "Retry installation".',
           '请将 NVIDIA 显卡驱动更新到 580 或更新版本，重启电脑后点击“重试安装”。')),
         (r'CUDA_ARCH_UNSUPPORTED', 'gpu-architecture',
-         ('This GPU lacks the required compute support', '这张显卡不满足当前计算要求'),
-         ('The detected GPU and compute capability are shown below. The CUDA runtime requires native BF16 computation (SM80 or newer). Use a compatible GPU; changing the driver does not change its hardware capability.',
-          '下方是这张显卡的信息。FreeVideo 需要较新的显卡，更新驱动无法解决。')),
+         ('This GPU is not supported', '这张显卡不受支持'),
+         ('FreeVideo requires a GPU with compute capability 8.0 or higher, such as an NVIDIA GeForce RTX 30 series card or newer. '
+          'This requirement does not depend on the amount of VRAM, and a driver update cannot change it.',
+          'FreeVideo 需要计算能力 8.0 及以上的显卡，例如 NVIDIA GeForce RTX 30 系列及更新型号。这一要求与显存大小无关，更新驱动也无法改变。')),
         (r'CUDA_CAPABILITY_UNKNOWN', 'gpu-detection',
          ('GPU information could not be read', '未能读取显卡信息'),
          ('Retry hardware detection. If it still fails, export the report; it includes the GPU identity and the raw driver query.',
@@ -666,6 +667,12 @@ def launcher_failure(value, *, zh=False, other_disk=False, disk_name='', can_rep
                 # The launcher's failure card shows the action only when there is no detail, so the
                 # instruction goes under the detected driver instead of being hidden by it.
                 return dict(title=title[zh], detail=detail + '\n' + action[zh], action='', kind=kind)
+            if kind == 'gpu-architecture':
+                found = re.search(r'\[CUDA_ARCH_UNSUPPORTED\]\s+(.+?)\s+\(SM\w+; compute capability ([\d.]+);', text)
+                if found:
+                    model, capability = found.groups()
+                    detail = ('检测到：%s，计算能力 %s' if zh else 'Detected: %s, compute capability %s') % (model, capability)
+                    return dict(title=title[zh], detail=detail + '\n' + action[zh], action='', kind=kind)
             return dict(title=title[zh], detail=detail, action=action[zh], kind=kind)
     # Validation messages are already actionable. Show the cause, not a stack
     # trace or a guessed hardware diagnosis, and leave long details expandable.
@@ -794,6 +801,73 @@ WRAPPING_ERROR = re.compile(r'(?:subprocess\.)?CalledProcessError\b')
 ANSI = re.compile(r'\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07\x1b]*(?:\x07|\x1b\\))')
 
 
+PLAIN_FIELD = re.compile(r'[^\w .+()/-]')
+
+
+def _plain(value, limit=40):
+    return PLAIN_FIELD.sub('', '' if value is None else str(value))[:limit].strip()
+
+
+def _mac_run(report, run, redactor):
+    """The machine, size, length and settings of a Mac failure, and whether its stage was retried.
+
+    One line of fixed fields; typed text is not part of it. The retried error is redacted whole
+    before it is shortened: a prompt or credential is only recognized in full.
+    """
+    hardware = report.get('runtime_hardware')
+    if report.get('device_backend') != 'mps' or not isinstance(hardware, dict):
+        return ''
+    ram = hardware.get('ram_total')
+    machine = [_plain(hardware.get('gpu_name')) or 'Apple GPU']
+    if type(ram) is int and ram > 0:
+        machine.append('%d GiB' % round(ram / 2**30))
+    software = report.get('runtime_software')
+    if isinstance(software, dict):
+        for key, label in (('macos', 'macOS'), ('mlx', 'MLX'), ('torch', 'torch')):
+            if software.get(key):
+                machine.append('%s %s' % (label, _plain(software[key], 20)))
+    parts = [', '.join(machine)]
+    canvas, plan = report.get('geometry'), report.get('sampling_plan')
+    if isinstance(canvas, dict) and type(canvas.get('width')) is int and type(canvas.get('height')) is int:
+        size = '%dx%d' % (canvas['width'], canvas['height'])
+        if isinstance(canvas.get('seconds'), (int, float)):
+            size += ' %.1f s' % canvas['seconds']
+        first = plan.get('first') if isinstance(plan, dict) and plan.get('enabled') is True else None
+        if isinstance(first, dict) and type(first.get('width')) is int and type(first.get('height')) is int:
+            size += ' (first pass %dx%d)' % (first['width'], first['height'])
+        parts.append(size)
+    if isinstance(plan, dict) and type(plan.get('base_steps')) is int:
+        two = plan.get('enabled') is True and type(plan.get('refine_steps')) is int
+        parts.append('two-pass %d+%d' % (plan['base_steps'], plan['refine_steps']) if two else '%d steps' % plan['base_steps'])
+    engine = (report.get('profile') or {}).get('engine') if isinstance(report.get('profile'), dict) else None
+    if isinstance(engine, dict) and engine.get('task'):
+        parts.append(_plain(engine['task']))
+    if report.get('step_cache'):
+        parts.append('step cache ' + _plain(report['step_cache']))
+    metrics = _read(Path(run) / 'video.engine.json', 512*1024)
+    try:
+        metrics = json.loads(metrics)
+    except ValueError:
+        metrics = {}
+    retries = metrics.get('memory_retries') if isinstance(metrics, dict) else None
+    row = retries[0] if isinstance(retries, list) and retries and isinstance(retries[0], dict) else None
+    if row is None:
+        parts.append('not retried')
+    else:
+        stages = metrics.get('stages') if isinstance(metrics.get('stages'), dict) else {}
+        key = row.get('phase')
+        joined = stages.get(key)
+        if (key == 'first-pass' and isinstance(joined, dict) and joined.get('joined_sampling') is True
+                and joined.get('success') is False and joined.get('sampling_phase') in ('upscale', 'refinement')):
+            # A joined child failed in a later pass; the retry ran that pass on its own.
+            key = joined['sampling_phase']
+        stage = stages.get(key)
+        passed = isinstance(stage, dict) and stage.get('success') is True
+        error = (redactor.text(str(row.get('error_message') or '')).strip().splitlines() or [''])[0][:160].replace('"', "'")
+        parts.append('%s retried once after "%s"; the retry %s' % (_plain(key, 20), error, 'passed' if passed else 'failed too'))
+    return 'Run: ' + '; '.join(parts)
+
+
 def generation_failure(run, exit_code=None, *, repair=None):
     """Surface the cause, including a child traceback, even without a report.
 
@@ -885,6 +959,9 @@ def generation_failure(run, exit_code=None, *, repair=None):
         lines.insert(1, 'Cause: ' + causes[-1][:300])
     if len(lines) == 1:
         lines.append('The worker ended without a readable error report.')
+    summary = _mac_run(report, run, redactor)
+    if summary:
+        lines.insert(2 if promoted else 1, summary)
     lines.append('\nRetained outputs: ' + str(run))
     # The table failure can be in a retained child log rather than the report.
     # Keep its numeric metadata ahead of technical output for all interactive callers.

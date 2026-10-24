@@ -64,3 +64,5 @@
 @keyframes fv-menu-enter{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
 @media(prefers-reduced-motion:reduce){.fv-actions *{transition:none!important;animation:none!important}}
 .fv-actions[data-unavailable=true] :is(a.fv-action[download],.fv-action-extend,.fv-share-trigger){opacity:.45;cursor:default;pointer-events:none}
+.fv-action-copy .fv-copy-text{display:inline-grid;justify-items:start}
+.fv-action-copy .fv-copy-text::after{content:attr(data-widest);grid-area:1/1;visibility:hidden;height:0;overflow:hidden}

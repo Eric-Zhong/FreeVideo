@@ -59,6 +59,7 @@ class Sessions:
         self.lock = threading.Lock()
         self.on_stop = []  # HTTP invokes these after persisting a user stop.
         self._meta = {}
+        self._unreadable = set()
         self._ids = {}
         self._clients = {}
         self._initial_seq = {}
@@ -95,28 +96,31 @@ class Sessions:
             return
         for path in paths:
             sid = path.stem
-            if schema.issues(schema.SESSION, sid) or path.is_symlink():
+            if schema.issues(schema.SESSION, sid):
                 continue
             try:
+                if path.is_symlink():
+                    continue
                 self._load_file(path, sid)
-            except OSError:
+            except (OSError, ValueError, UnicodeDecodeError, SessionError, AttributeError) as error:
                 # One unreadable file must not stop the agent from starting.
                 for table in (self._meta, self._ids, self._clients, self._acted, self._said, self._initial_seq, self._user_seq):
                     table.pop(sid, None)
                 self._chosen.discard(sid)
                 self._partial.discard(sid)
-                logging.getLogger(__name__).warning('Skipped an unreadable session file')
+                if not isinstance(error, FileNotFoundError):
+                    self._unreadable.add(sid)
+                    logging.getLogger(__name__).warning('Skipped an unreadable session file')
 
     def _load_file(self, path, sid):
         with path.open('rb') as stream:
             first = stream.readline()
-            try:
-                meta = json.loads(first)
-                if not first.endswith(b'\n') or meta.get('session') != sid:
-                    return
-                _check(schema.session_metadata(), meta)
-            except (ValueError, UnicodeDecodeError, SessionError, AttributeError):
-                return
+            if not first.endswith(b'\n'):
+                return  # Creation has not committed a complete header yet.
+            meta = json.loads(first)
+            if meta.get('session') != sid:
+                raise _invalid('/session', 'the session id of the saved file')
+            _check(schema.session_metadata(), meta)
             self._meta[sid] = dict(id=sid, title=meta['title'], created_at=meta['created_at'],
                 updated_at=meta['created_at'], client=meta['client'], last_seq=0, stopped=False)
             self._ids[sid] = {}
@@ -138,6 +142,12 @@ class Sessions:
                     continue
                 self._fold(sid, event)
             self._initial_seq[sid] = self._meta[sid]['last_seq']
+        self._unreadable.discard(sid)
+
+    @property
+    def unreadable(self):
+        with self.lock:
+            return len(self._unreadable)
 
     def _fold(self, sid, event):
         meta = self._meta[sid]
@@ -194,6 +204,7 @@ class Sessions:
             self._ids[sid], self._clients[sid] = {}, {client} if client else set()
             self._initial_seq[sid] = 0
             self._acted[sid] = (meta['created_at'], 1)
+            self._unreadable.discard(sid)
             if by == 'user':
                 self._chosen.add(sid)
             return deepcopy(self._meta[sid])

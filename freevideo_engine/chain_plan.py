@@ -35,11 +35,14 @@ def _first_frames(seconds):
     return geometry(seconds=seconds)['frames']
 
 
-def plan(seconds, single=False, max_frames=None, single_limit_seconds=None, block_seconds=None, continued=False):
+def plan(seconds, single=False, max_frames=None, single_limit_seconds=None, block_seconds=None, continued=False, max_parts=None):
     """`max_frames`: the most frames this device generates at once for the current settings (unknown: 15 s).
 
     `continued`: the video goes on from a saved one, so its first block too spends OVERLAP frames on what
     came before and adds only the rest.
+
+    `max_parts`: the most parts one video may have. A new video that needs more is refused here, before anything
+    is submitted; a continued one adds to parts this planner does not know, so the server checks it on submission.
     """
     _number(seconds, 'Length')
     if type(single) is not bool:
@@ -104,6 +107,8 @@ def plan(seconds, single=False, max_frames=None, single_limit_seconds=None, bloc
         raise PlanError('length_not_splittable', 'This length cannot be cut into parts of the requested length')
     if count > MAX_BLOCKS:
         raise PlanError('too_long', 'This length needs too many blocks')
+    if max_parts is not None and not continued and count + 1 > max_parts:
+        raise PlanError('too_many_parts', 'One continuous shot can have up to %d parts. Make it shorter.' % max_parts)
     lengths = [whole // count + (index < whole % count) for index in range(count)]
     if continued:
         lengths[0] = round(lengths[0] - (whole - total), 6)  # a fractional request keeps its length in the first part

@@ -1,33 +1,66 @@
 {
   "schema": 1,
-  "product_version": "0.4.19",
+  "product_version": "0.4.20",
   "en": {
-    "summary": "Several pictures can be deleted from the image history at once; prompt enhancement states the reason when it cannot finish.",
+    "summary": "One continuous shot can now be split into up to 8 parts; generated pictures can be downloaded directly and the path of a video can be copied.",
     "changes": [
-      "Install: setup no longer stops when some graphics card details cannot be read; command-line generation works on Windows when FreeVideo is installed in a very deep folder.",
-      "Image history: after Select, several pictures can be checked and deleted at once, with a second click to confirm; pictures that are in use or cannot be deleted stay in place with the reason shown.",
-      "Prompt enhancement: when enhancement cannot finish and the original prompt is used, the reason is shown; a rewrite that lacks the video or audio description is sent back to the model to add it.",
-      "Editor: Extend on a finished video without a description asks for a description first instead of showing an English validation error; when the description box is cleared, the description carried over for that segment is used.",
-      "The Linux package now includes curl, so installation and downloads work on systems without it.",
-      "Download list: the check no longer hashes every model file again each time it runs; files already hashed are skipped while their size, times and inode are unchanged.",
-      "Keeps the failed phase, step count, error type and memory readings of a GPU error that raised the compatibility level, so a diagnostic report sent after a later run still shows where it stopped.",
-      "The chat no longer shows the notice for an edited waiting message as an error with a report button; it is a plain status line."
+      "Long videos: one continuous shot can now be split into up to 8 parts instead of 5. The line below the duration in the creation panel states that each run makes one continuous shot and points to Edit or Autopilot for a storyboard; a length that needs more parts than allowed is stopped before it is submitted, and a refusal at submission is shown as a plain notice instead of an unknown error.",
+      "Reference video: fixed generation failing when a reference video is combined with a non-default upscale factor such as 1.5x.",
+      "Pictures and videos: picture cards in the Autopilot chat and the enlarged picture view have a Download button; results in the library and the creation panel have Copy path.",
+      "The desktop notification for a finished generation is now on by default: permission is requested once, the first time Generate is clicked; it stays off for anyone who has turned it off.",
+      "Edit: while the generation service has not answered, the generation bar stays visible with Generate dimmed; when the automatic checks get no answer, the status line shows \"Generation unavailable\" with a retry link, which checks again when clicked.",
+      "The edits, imports, characters, Agent conversations and Agent jobs lists now end with a line such as \"N edits could not be read\" when some records cannot be read.",
+      "Windows graphics cards with 8 to 12 GB of video memory: the first pass of FP8 two-pass videos on RTX 40 and 50 series cards, and the second pass of int8 videos longer than 10 seconds on 12 GB cards, now run attention 8 heads at a time instead of 4, within the planned memory budget. LoRA, Linux and Mac are unchanged. The same seed can give a slightly different video.",
+      "Retry after one-time errors: a second pass that stops with a one-time CUDA error resumes once from the finished first pass instead of failing or repeating it; on a Mac, a pass that stops with a Metal command-buffer error is retried once with smaller memory partitions. Failure reports name the machine, settings and retry result, and report ids stay retrievable after the service restarts.",
+      "Decoding the same request with the same seed now writes identical pixels every time. Compared with earlier versions, the same seed can give slightly different pixels.",
+      "The card shown for an unsupported graphics card now names the detected card and its compute capability, and states that FreeVideo needs compute capability 8.0 or higher (GeForce RTX 30 series or newer) regardless of VRAM. Error text no longer replaces a slash inside a sentence with a path placeholder."
     ]
   },
   "zh": {
-    "summary": "生图历史可以一次删除多张；提示词增强未能完成时写明原因。",
+    "summary": "一个连续镜头最多可分 8 段；生成的图片可以直接下载，作品可以复制路径。",
     "changes": [
-      "安装：部分显卡信息读不到时，安装不再中断；Windows 上 FreeVideo 安装在很深的文件夹时，命令行生成可以正常运行。",
-      "生图历史：点“选择”后可以勾选多张一次删除，删除前需要再次确认；被占用或无法删除的图片会保留并写明原因。",
-      "提示词增强：增强未能完成、改用原提示词时，写明原因；改写结果缺少视频或音频描述时，会请模型补上。",
-      "剪辑页：在没有描述的成片后“接着生成”时，会提示先写一句描述，不再显示英文校验错误；描述框被清空时，沿用这一段原有的描述。",
-      "Linux 安装包自带 curl，系统未安装 curl 时也能正常安装和下载。",
-      "下载清单：检查不再每次重新校验所有模型文件；已经校验过的文件在大小、时间和 inode 都没变时直接跳过。",
-      "保留导致兼容档位升高的显卡错误的出错阶段、步数、错误类型和内存读数，之后一次运行发送的诊断报告仍能看出它停在哪里。",
-      "对话中修改了正在等待 Agent 的消息后，提示不再按错误显示、不再带“报告问题”按钮，改为普通状态提示。"
+      "长视频：一个连续镜头最多可分 8 段（原为 5 段）。创作面板时长下方写明每次生成一个连续镜头，有分镜剧本时可转到剪辑视图或 AI 全自动；所需段数超过上限时在提交前提示缩短时长，提交时仍被拒绝也显示为普通提示，不再显示为未知错误。",
+      "参考视频：修复参考视频配合 1.5 倍等非默认放大倍数时生成失败。",
+      "图片和作品：AI 全自动对话中的图片卡和放大查看窗增加“下载”；作品库和创作面板的结果按钮增加“复制路径”。",
+      "生成完成的桌面通知改为默认开启：第一次点生成时请求一次通知权限；已经关闭通知的保持关闭。",
+      "剪辑视图：生成服务暂时没有回答时，生成栏不再被藏起，“生成”按钮置灰；几次自动检查都没有回答时，状态行显示“生成服务暂不可用 · 重试”，点击后重新检查。",
+      "剪辑、已导入、角色、Agent 对话和 Agent 任务列表中有记录无法读取时，列表末尾写明“另有 N 个……无法读取”。",
+      "Windows 上显存 8–12 GB 的显卡：RTX 40 和 50 系列 FP8 两遍视频的第一遍，以及 12 GB 显卡上超过 10 秒的 int8 视频的第二遍，每次计算的注意力头由 4 个增加到 8 个，显存占用保持在计划预算内。LoRA、Linux 和 Mac 不变。同一个种子生成的视频可能略有不同。",
+      "一次性错误自动重试：第二遍遇到一次性的 CUDA 错误时，自动从已完成的第一遍续跑一次，不再整个请求失败或重做第一遍；Mac 上采样阶段遇到 Metal 命令缓冲区错误时，会用更小的内存分块重试一次。失败报告写明机器、设置和重试结果，报告编号在服务重启后仍可取回。",
+      "同一请求、同一种子，解码出的画面每次逐位一致。与之前的版本相比，同一种子的画面可能有细微差别。",
+      "不受支持的显卡的提示卡现在写出检测到的显卡和计算能力，并说明 FreeVideo 需要计算能力 8.0 及以上的显卡（GeForce RTX 30 系列及更新），与显存大小无关。错误文字中句子里的斜杠不再被替换成路径占位符。"
     ]
   },
   "history": [
+    {
+      "product_version": "0.4.19",
+      "en": {
+        "summary": "Several pictures can be deleted from the image history at once; prompt enhancement states the reason when it cannot finish.",
+        "changes": [
+          "Install: setup no longer stops when some graphics card details cannot be read; command-line generation works on Windows when FreeVideo is installed in a very deep folder.",
+          "Image history: after Select, several pictures can be checked and deleted at once, with a second click to confirm; pictures that are in use or cannot be deleted stay in place with the reason shown.",
+          "Prompt enhancement: when enhancement cannot finish and the original prompt is used, the reason is shown; a rewrite that lacks the video or audio description is sent back to the model to add it.",
+          "Editor: Extend on a finished video without a description asks for a description first instead of showing an English validation error; when the description box is cleared, the description carried over for that segment is used.",
+          "The Linux package now includes curl, so installation and downloads work on systems without it.",
+          "Download list: the check no longer hashes every model file again each time it runs; files already hashed are skipped while their size, times and inode are unchanged.",
+          "Keeps the failed phase, step count, error type and memory readings of a GPU error that raised the compatibility level, so a diagnostic report sent after a later run still shows where it stopped.",
+          "The chat no longer shows the notice for an edited waiting message as an error with a report button; it is a plain status line."
+        ]
+      },
+      "zh": {
+        "summary": "生图历史可以一次删除多张；提示词增强未能完成时写明原因。",
+        "changes": [
+          "安装：部分显卡信息读不到时，安装不再中断；Windows 上 FreeVideo 安装在很深的文件夹时，命令行生成可以正常运行。",
+          "生图历史：点“选择”后可以勾选多张一次删除，删除前需要再次确认；被占用或无法删除的图片会保留并写明原因。",
+          "提示词增强：增强未能完成、改用原提示词时，写明原因；改写结果缺少视频或音频描述时，会请模型补上。",
+          "剪辑页：在没有描述的成片后“接着生成”时，会提示先写一句描述，不再显示英文校验错误；描述框被清空时，沿用这一段原有的描述。",
+          "Linux 安装包自带 curl，系统未安装 curl 时也能正常安装和下载。",
+          "下载清单：检查不再每次重新校验所有模型文件；已经校验过的文件在大小、时间和 inode 都没变时直接跳过。",
+          "保留导致兼容档位升高的显卡错误的出错阶段、步数、错误类型和内存读数，之后一次运行发送的诊断报告仍能看出它停在哪里。",
+          "对话中修改了正在等待 Agent 的消息后，提示不再按错误显示、不再带“报告问题”按钮，改为普通状态提示。"
+        ]
+      }
+    },
     {
       "product_version": "0.4.18",
       "en": {
@@ -269,37 +302,6 @@
         "changes": [
           "用 Total frames 里填的不是帧数的工作流或恢复的标签页生成时，不再被帧数错误拒绝，这个数会按时长读取。",
           "int8：带调制部分的 LoRA 不再让生成中断，这些部分会逐个跳过，跳过的数量写进报告。"
-        ]
-      }
-    },
-    {
-      "product_version": "0.4.10",
-      "en": {
-        "summary": "High on Mac uses the step cache and finishes much sooner; in the editor, audio clips can move to another audio track, and several notices and narrow-window layouts are clearer; workflows saved by an earlier version generate again.",
-        "changes": [
-          "Mac: High uses the step cache on the first pass and finishes much sooner, and the starting time estimate is based on the chip, so it is closer from the first step.",
-          "Editor: an audio clip dragged from the library onto the second audio track lands there, and a single audio clip on the timeline can be dragged to another audio track.",
-          "Editor: pressing split or trim while the playhead is outside the selected part, or asking for full screen where the browser refuses it, now says why in one line.",
-          "Character mentions written back to back, with no space between the names, are each recognised, and the character list opens again right after a name.",
-          "Autopilot: while a task is running, the Autopilot button in the header stays whole and clickable in narrow windows.",
-          "Chat: on phones and other narrow windows, button names quoted in notices stay on one line.",
-          "Diagnostic reports for failed image and video requests record the available memory when the request started and when the generation process ended, and whether the system appears to have ended the process.",
-          "Nodes: the English Width, Height and Seed labels are capitalised like the other fields.",
-          "Generating from a workflow saved by an earlier version, or from a restored tab, no longer fails with an invalid step cache setting."
-        ]
-      },
-      "zh": {
-        "summary": "Mac 精细档使用步间缓存，快得多；编辑器里音频片段可以拖到另一条音频轨；几处提示和窄窗口布局更清楚；旧版本保存的工作流又能正常生成。",
-        "changes": [
-          "Mac：精细档第一遍使用步间缓存，快得多；开始时的预计时间按芯片给出，从第一步起就更接近实际。",
-          "编辑器：从素材库把音频拖到第二条音频轨会放在该轨；时间线上单个音频片段可以拖到另一条音频轨。",
-          "编辑器：播放头不在所选片段上时按切分或修剪，或在浏览器不允许全屏的地方点全屏，会用一行字说明原因。",
-          "连着写、名字之间没有空格的角色提及都能被识别，写完一个名字后接着输入也会弹出角色列表。",
-          "AI 全自动：有任务在跑时，窄窗口里顶栏的“AI 全自动”按钮也始终完整可点。",
-          "对话：手机等窄窗口里，提示中引号内的按钮名不再被拆到两行。",
-          "图像和视频失败请求的诊断报告现在记录请求开始和生成进程结束时的可用内存，并标明进程是否疑似被系统结束。",
-          "节点：英文界面里 Width、Height、Seed 的大小写与其他项一致。",
-          "修复：用旧版本保存的工作流或恢复的标签页生成时提示步间缓存参数无效。"
         ]
       }
     }

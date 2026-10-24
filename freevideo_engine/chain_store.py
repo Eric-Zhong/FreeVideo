@@ -26,8 +26,8 @@ SPLIT_REASONS = {
     'unavailable': 'Splitting is not available here, so every part used the whole description.',
     'failed': 'Splitting the description failed, so every part used the whole description.',
 }
-# Parts one video may be continued through: the first part and four continuations.
-MAX_PARTS = 5
+# Parts one video may be continued through: the first part and seven continuations.
+MAX_PARTS = 8
 
 
 def reference(value, queue=False):

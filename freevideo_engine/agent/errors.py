@@ -66,7 +66,7 @@ ERRORS = {
     'chain_unavailable': (503, True, 'The continuous generation backend is unavailable.', 'Start FreeVideo with the continuous generation backend enabled, then retry.'),
     'chain_missing': (409, True, 'The saved chain receipt is unavailable.', 'Restore the chain receipt and retry resume, or submit a new job.'),
     'join_failed': (409, True, 'The generated blocks could not be joined; completed blocks are retained.', 'POST /freevideo/agent/v1/jobs/{id}/resume to retry joining the completed blocks.'),
-    'chain_too_long': (422, False, 'This video can have up to 5 parts. Make it shorter.', 'Submit a new job with a smaller seconds; continue_from counts the parts of the video it continues.'),
+    'chain_too_long': (422, False, 'One continuous shot can have up to 8 parts. Make it shorter.', 'Submit a new job with a smaller seconds, or cut to a new shot with a new job without continue_from; continue_from counts the parts of the video it continues.'),
     'chain_rejected': (409, False, 'The continuous backend rejected this generation.', 'Read GET /freevideo/agent/v1/capabilities and submit a supported generation request.'),
     'invalid_wait': (422, False, 'wait must be a finite nonnegative number of seconds.', 'Use wait=0 or wait=25; larger valid values are clamped to 25 seconds.'),
     'invalid_resume': (422, False, 'resume accepts an empty object or an optional ref only.', 'Send {} or {"ref":"resume-1"}; submit a new job to change generation parameters.'),

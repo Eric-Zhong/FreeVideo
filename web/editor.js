@@ -62,7 +62,7 @@ export function editorErrorText(value, t = en => en) {
         return t(`${stage}: not enough GPU memory.`, `${stage}时显存不足。`);
     const known = {
         chain_part_too_short: t('Each continued part needs at least 10 seconds.', '接续的每段至少 10 秒。'),
-        chain_too_long: t('A video can have up to 5 parts.', '一条视频最多 5 段。'),
+        chain_too_long: t('One continuous shot can have up to 8 parts.', '一个连续镜头最多 8 段。'),
         too_long: t('This part is longer than the maximum length. Shorten it and try again.', '这一段超过了最长时长，请缩短后再试。'),
         missing_node: t('Generation is not ready. Restart FreeVideo.', '生成功能没有就绪，请重新启动 FreeVideo。'),
         chain_missing: t('Generation could not start. Choose "Generate" again.', '生成没能开始，请再点“生成”。'),
@@ -301,7 +301,7 @@ export function openEditor({api, app, from = null, panel = {}, components: given
         if (code === 'unsupported') { genbar?.update(null); return; }
         if (['chain_too_long', 'chain_part_too_short'].includes(code)) {
             const [en, zh] = (value.said || []).map(text => typeof text === 'string' && text ? text.slice(0, 200) : null);
-            const text = code === 'chain_too_long' ? t(en || 'This video can have up to 5 parts. Make it shorter.', zh || '这条视频最多 5 段，请缩短一些。')
+            const text = code === 'chain_too_long' ? t(en || 'One continuous shot can have up to 8 parts. Make it shorter.', zh || '一个连续镜头最多 8 段，请缩短。')
                 : t(en || 'Each continued part must be at least 10 seconds. Make it longer.', zh || '接着生成的每一段至少 10 秒，请加长一些。');
             out(text); return {ok: false, reason: code, say: text};
         }
@@ -317,10 +317,11 @@ export function openEditor({api, app, from = null, panel = {}, components: given
         const text = step === 'generate' ? editorErrorText(value, t) : step === 'export' ? exportErrorText(value, t) : t('Could not complete. Try again.', '没有完成，请重试');
         out(text, step === 'export' ? EXPORT_ISSUE : EDITOR_ISSUE, failureKind(site, value)); return {ok: false, reason: code, say: text};
     }
-    const store = createEditorStore(api, {t, notify, standIn: given?.generationStandIn, onGenerationReady: ready => {
+    const store = createEditorStore(api, {t, notify, standIn: given?.generationStandIn, onGenerationChecking: () => { if (!disposed) settleService(); }, onGenerationReady: ready => {
         if (disposed) return;
-        generationAsked = true; genHost.hidden = !ready; element.dataset.generationReady = String(ready);
-        settleGenbar(); if (ready) { offerInitial?.(); extendEntry?.(); void startHeld(); }
+        // Only a server that said it cannot generate hides the bar; an unanswered check keeps it, greyed.
+        generationAsked = true; genHost.hidden = !ready && store.generationGone; element.dataset.generationReady = ready ? 'true' : store.generationGone ? 'false' : 'waiting';
+        settleGenbar(); settleService(); if (ready) { offerInitial?.(); extendEntry?.(); void startHeld(); }
         // Parts queued while waiting for the answer never start here; they go back to drafts with the reason.
         else if (store.generationGone && held.length) {
             for (const entry of held.splice(0)) markHeld(entry.ids, false);
@@ -333,8 +334,10 @@ export function openEditor({api, app, from = null, panel = {}, components: given
     let generationAsked = store.generationAvailable, loaded = false;
     const settleGenbar = () => {
         // While the engine is still answering, a press queues the part instead of doing nothing.
-        genHost.inert = !loaded || generationAsked && !store.generationAvailable; genHost.classList.toggle('fv-ed-pending', !loaded);
+        genHost.inert = !loaded; genHost.classList.toggle('fv-ed-pending', !loaded);
     };
+    // When every automatic check went unanswered, the bar's line offers to check again; not while a check runs.
+    const settleService = () => genbar?.service(store.generationStalled ? {checking: store.generationChecking, retry: () => store.retryGeneration()} : null);
     store.generationReady();
     const queue = store.createSaveQueue({get record() { return state.record; },
         adopt(value) {
@@ -740,9 +743,11 @@ export function openEditor({api, app, from = null, panel = {}, components: given
         const remove = button(deleteEditText(t).item, confirmDelete, 'fv-ed-delete'); remove.setAttribute('role', 'menuitem'); menu.append(remove);
         try {
             // The current edit is already named in the box at the top.
-            const rows = (await store.projects()).filter(row => row.id !== state.record.id && !hiddenEmptyEdit(row, initial())); if (disposed || menu.hidden || !menu.contains(name)) return;
-            if (rows.length) { const line = el('div'); line.setAttribute('role', 'separator'); menu.append(line); }
+            const listed = await store.projects(), unread = listed.unreadable || 0;
+            const rows = listed.filter(row => row.id !== state.record.id && !hiddenEmptyEdit(row, initial())); if (disposed || menu.hidden || !menu.contains(name)) return;
+            if (rows.length || unread) { const line = el('div'); line.setAttribute('role', 'separator'); menu.append(line); }
             for (const row of rows) { const item = button(row.name || new Date(row.updated_at).toLocaleDateString(), () => switchProject(row.id), 'fv-ed-project'); item.setAttribute('role', 'menuitem'); item.title = item.textContent; menu.append(item); }
+            if (unread) menu.append(el('p', 'fv-ed-unreadable', t(`${unread} ${unread === 1 ? 'edit' : 'edits'} could not be read`, `另有 ${unread} 个剪辑无法读取`)));
         } catch (value) { error(value, null, undefined, 'projects'); }
         name.focus(); name.select();
     }
@@ -759,6 +764,8 @@ export function openEditor({api, app, from = null, panel = {}, components: given
         },
         generationLimits: () => ({maxSeconds: capability.maxSeconds, maxFollowSeconds: capability.maxFollowSeconds}),
         generationAvailable: () => store.generationAvailable,
+        // The server was asked and has not said yes: Generate is greyed until it does.
+        generationWaiting: () => generationAsked && !store.generationAvailable,
         importFiles: (files, options) => library?.importFiles(files, options),
         gestureStart({selectionGesture = false} = {}) {
             pointerEditing = true;
@@ -1118,7 +1125,7 @@ export function openEditor({api, app, from = null, panel = {}, components: given
         return running;
     }
 
-    genbar = createEditorGenbar(genHost, {state, t, actions, text: ''});
+    genbar = createEditorGenbar(genHost, {state, t, actions, text: ''}); settleService();
     const adjust = adjustPanel = createAdjustPanel(adjustHost, {state, t, actions});
     const pictureEdit = pictureSession(state, t);
     const notes = createBlockNotes({state, t, actions}); actions.blockNote = notes.decorate; actions.describedTrack = describedTrack;

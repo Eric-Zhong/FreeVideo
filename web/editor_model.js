@@ -9,7 +9,7 @@ export const FPS = 24;
 // followSeconds mirrors chain_plan.MIN_PART_SECONDS: a part that continues another is at least this long.
 export const RULES = Object.freeze({maxSeconds: 15, singleSeconds: 30, minSeconds: 2, tailSeconds: 5, followSeconds: 10,
     step: 17, first: 5, overlap: 22,
-    maxTracks: 3, maxClips: 500, maxText: 8000, maxParts: 5});
+    maxTracks: 3, maxClips: 500, maxText: 8000, maxParts: 8});
 // Slice and bound user text by Unicode code points, never UTF-16 halves.
 export const truncateText = (text, limit) => Array.from(text).slice(0, limit).join('');
 export const copyName = (name, suffix) => truncateText(name, RULES.maxText - Array.from(suffix).length) + suffix;
@@ -710,7 +710,7 @@ export const partLengths = (frames, {maxSeconds = RULES.maxSeconds, maxFollowSec
 export function maxRangeFrames(record, {continues = false, maxSeconds = RULES.maxSeconds, maxFollowSeconds = maxSeconds}) {
     const before = continues;
     const follow = Math.floor(Math.min(RULES.maxSeconds, maxFollowSeconds)) * FPS;
-    // The part being continued is the first of the five.
+    // The part being continued is the first of them.
     return before ? (RULES.maxParts - 1) * follow : Math.floor(Math.min(RULES.maxSeconds, maxSeconds)) * FPS + (RULES.maxParts - 1) * follow;
 }
 // Manual boundaries use device limits, not the automatic fifteen-second preference.

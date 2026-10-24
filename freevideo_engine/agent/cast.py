@@ -196,6 +196,7 @@ class Cast:
         self.directory = jobs.directory / 'cast'
         self.records = {}
         self.deleted = {}
+        self._unreadable = set()  # Bad cards whose quarantine rename failed.
         self.changed = threading.Condition(jobs.lock)
         self.landing = set()  # Cards whose reference pictures a tick is landing now (under the lock).
         self.load()
@@ -204,6 +205,8 @@ class Cast:
     def load(self):
         for folder, target in ((self.directory / '.deleted', self.deleted), (self.directory, self.records)):
             for path in sorted(folder.glob('*.json')):
+                if not CARD.fullmatch(path.stem):
+                    continue
                 try:
                     record = json.loads(path.read_text(encoding='utf-8'))
                     _check(record, path.stem)
@@ -212,11 +215,16 @@ class Cast:
                         path.unlink()
                         continue
                     target[path.stem] = record
+                    self._unreadable.discard(path)
+                except FileNotFoundError:
+                    continue  # A missing record is not an unreadable card.
                 except (ValueError, KeyError, TypeError, AttributeError, IndexError, RecursionError, OSError):
                     try:
                         path.replace(path.with_name(path.name + '.bad-' + uuid.uuid4().hex))
+                        self._unreadable.discard(path)
                     except OSError:
-                        pass
+                        if target is self.records:
+                            self._unreadable.add(path)
                     logging.getLogger(__name__).warning('Isolated an invalid cast card; other cards remain available')
 
     def _write(self, folder, record):
@@ -235,6 +243,7 @@ class Cast:
     def _save(self, record):
         self._write(self.directory, record)
         self.records[record['card']['id']] = record
+        self._unreadable.discard(self.directory / (record['card']['id'] + '.json'))
         self.changed.notify_all()
 
     def _record(self, identity):
@@ -411,7 +420,11 @@ class Cast:
                     and (not production or production in c['used_by'] or c['made_for'] == production)
                     and (not text or text in c['name'].casefold() or text in (c['description'] or '').casefold())]
             rows.sort(key=lambda c: (c['updated_at'], c['id']), reverse=True)
-            return dict(cards=[row_view(c) for c in rows[:limit]], total=len(rows))
+            unreadable = 0
+            if production is None:
+                quarantined = {path for path in self.directory.glob('*.json.bad-*') if path.is_file()}
+                unreadable = len(quarantined | {path for path in self._unreadable if path.exists()})
+            return dict(cards=[row_view(c) for c in rows[:limit]], total=len(rows), unreadable=unreadable)
 
     def update(self, identity, value, *, by='builtin', ref=None, revision=None, local=False, client=None):
         shape = schema.cast_schema('update', local=local)

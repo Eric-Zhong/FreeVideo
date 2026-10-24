@@ -34,9 +34,24 @@ def compile_blocks(decoder):
         return False
     for block in decoder.transformer_blocks:
         if not getattr(block, 'freevideo_compiled', False):
-            block.forward = torch.compile(block.forward, dynamic=False)
+            block.forward = _fixed_reduction_order(torch.compile(block.forward, dynamic=False))
             block.freevideo_compiled = True
     return True
+
+
+def _fixed_reduction_order(compiled):
+    """Run the compiled block with Inductor's deterministic mode.
+
+    Otherwise Inductor times several warp counts for each fused RMSNorm reduction
+    when a process first runs the block, and the counts sum in different orders.
+    About 1 process in 20 then decoded the same latents to pixels that differ by one
+    8-bit level in 0.3% of values; 150 processes in this mode gave identical output.
+    """
+    def forward(*args, **kwargs):
+        from torch._inductor import config
+        with config.patch(deterministic=True):
+            return compiled(*args, **kwargs)
+    return forward
 
 
 class TileDecoder:

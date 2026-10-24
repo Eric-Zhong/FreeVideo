@@ -100,6 +100,13 @@ class StepCache:
         self.accumulated = 0.
 
     # ---- shared ------------------------------------------------------------------------------------
+    def forget(self):
+        """Drop every earlier step: the packed sequence changed length (an early reference ended), so the
+        cached residuals, velocities and rate belong to another layout and cannot be compared with it."""
+        self.previous = self.tail = self.anchor = None
+        self.prev_input = self.prev_diff = self.prev_out = self.rate = None
+        self.consecutive, self.accumulated = 0, 0.
+
     def in_window(self):
         start, end = WINDOWS.get(self.kind, (0., 1.))
         progress = self.step / self.steps
@@ -132,6 +139,8 @@ class StepCache:
         audio, video = (now - then for now, then in zip(self._samples(after), self.before))
         self.before = None
         hit, scores = False, None
+        if self.previous is not None and (self.previous[0].shape != audio.shape or self.previous[1].shape != video.shape):
+            self.forget()
         if self.previous is not None and self.tail is not None and self.in_window() and self.consecutive < 2:
             scores = (_relative(audio, self.previous[0]), _relative(video, self.previous[1]))
             decisive = scores[1]
@@ -162,6 +171,8 @@ class StepCache:
         # Copies: float32 latents make .float() a view, and the sampler updates them in place.
         current_in = (_copy(video_in[stride]), _copy(audio_in[stride]))
         current_out = (_copy(video_out[stride]), _copy(audio_out[stride]))
+        if self.prev_input is not None and any(a.shape != b.shape for a, b in zip(self.prev_input, current_in)):
+            self.forget()
         if self.prev_input is not None and self.prev_out is not None:
             rates = []
             for i in range(2):
@@ -176,6 +187,9 @@ class StepCache:
 
     def _easycache(self, video_in, audio_in):
         reuse = False
+        if self.prev_input is not None and (self.prev_input[0].shape[0] != video_in.shape[0]
+                                            or self.prev_input[1].shape[0] != audio_in.shape[0]):
+            self.forget()
         if self.rate is not None and self.prev_diff is not None and self.in_window():
             stride = (slice(None), slice(None, None, STRIDE))
             current = (video_in[stride].float(), audio_in[stride].float())

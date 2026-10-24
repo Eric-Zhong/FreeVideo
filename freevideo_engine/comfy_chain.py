@@ -333,7 +333,7 @@ def register(host_factory=None):
             value = await body(request)
             result = chain_plan.plan(
                 value.get('seconds'), value.get('single', False), value.get('max_frames'),
-                value.get('single_limit_seconds'), value.get('block_seconds'))
+                value.get('single_limit_seconds'), value.get('block_seconds'), max_parts=runner.max_parts)
             if not result['single'] and not continuation_supported():
                 # A device that cannot continue a video has one block to give: never a plan in parts.
                 raise chain_plan.PlanError('device_limit', 'This device cannot generate this length at this size')

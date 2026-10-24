@@ -143,7 +143,7 @@ def run(args):
         resource = policy(args)
         hardware = inventory()['hardware']
         resource['hardware'] = hardware
-        report.update(runtime_hardware=hardware, runtime_code=code_identity())
+        report.update(runtime_hardware=hardware, runtime_code=code_identity(), runtime_software=runtime_software())
         print(json.dumps(dict(event='compute_device', backend='MPS', name=hardware['gpu_name'],
                               memory_model='unified', ram_total_bytes=hardware['ram_total'])), flush=True)
         from .continuation import validate_frames, summary as continuation_summary
@@ -342,7 +342,7 @@ def run(args):
             if hide_tail_frames:
                 engine['hide_tail_frames'] = hide_tail_frames
             if getattr(args, 'step_cache', None) == 'easycache-av':
-                engine['step_cache'] = args.step_cache
+                engine['step_cache'] = report['step_cache'] = args.step_cache
             if output_size:
                 engine['output_size'] = [output_size['width'], output_size['height']]
             if preview:
@@ -370,6 +370,17 @@ def run(args):
         report['request_seconds'] = time.monotonic() - started
         save(output.with_suffix('.request.json'), report)
         write_debug(output)
+
+
+def runtime_software():
+    """The system and library versions a Metal failure depends on."""
+    versions = dict(macos=platform.mac_ver()[0])
+    for name in ('mlx', 'torch'):
+        try:
+            versions[name] = importlib.metadata.version(name)
+        except importlib.metadata.PackageNotFoundError:
+            versions[name] = None
+    return versions
 
 
 def worker(value):

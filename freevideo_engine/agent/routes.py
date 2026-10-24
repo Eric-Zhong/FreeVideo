@@ -1111,7 +1111,7 @@ def register():
                 order = (finished if finished is not None else job['created_at'], job['created_at'], job['id'])
                 if sid not in covers or order < covers[sid][0]:
                     covers[sid] = (order, work)
-            return dict(agent=agent_state(), here=here,
+            return dict(agent=agent_state(), here=here, unreadable=store.unreadable if store is not None else 0,
                         conversations=[dict(row, running=running.get(row['id'], 0),
                                             cover='/freevideo/library/thumbnail?id=' + quote(covers[row['id']][1], safe='')
                                             if row['id'] in covers else None) for row in rows])
@@ -1195,13 +1195,15 @@ def register():
             rows = sorted(jobs.rows(), key=lambda r: (r['created_at'], r['id']), reverse=True)
             active = sum(1 for r in rows if r['status'] in ACTIVE)
             cursor = request.query.get('cursor')
+            unreadable = jobs.unreadable if cursor is None else 0
             if cursor is None:
                 shown = [r for r in rows if r['status'] in ACTIVE or (r.get('finished_at') or 0) > now - 1800][:12]
                 after = shown[-1] if shown else None
                 older = [r for r in rows if after is None or (r['created_at'], r['id']) < (after['created_at'], after['id'])]
                 if after is None and older:
                     # Nothing recent: history starts from the newest job.
-                    return dict(active=active, jobs=[], next_cursor=_activity_cursor({'created_at': older[0]['created_at'] + 1, 'id': ''}))
+                    return dict(active=active, jobs=[], unreadable=unreadable,
+                                next_cursor=_activity_cursor({'created_at': older[0]['created_at'] + 1, 'id': ''}))
             else:
                 try:
                     stamp, _, ident = cursor.partition(':')
@@ -1212,7 +1214,7 @@ def register():
                     return None
                 page = [r for r in rows if (r['created_at'], r['id']) < key]
                 shown, older = page[:30], page[30:]
-            return dict(active=active, jobs=[activity_item(r) for r in shown],
+            return dict(active=active, jobs=[activity_item(r) for r in shown], unreadable=unreadable,
                         next_cursor=_activity_cursor(shown[-1]) if shown and older else None)
         value = await asyncio.to_thread(read)
         return problem('invalid_request', 'Invalid cursor') if value is None else reply(value)

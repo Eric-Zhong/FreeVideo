@@ -173,10 +173,10 @@ export function mediaURL(api, value) {
     return api.apiURL?.(path) || path;
 }
 
-export function createEditorStore(api, {t = en => en, notify = () => {}, onGenerationReady = () => {}, clock = clockDefault, pollMs = 2000, standIn: injected = null} = {}) {
+export function createEditorStore(api, {t = en => en, notify = () => {}, onGenerationReady = () => {}, onGenerationChecking = () => {}, clock = clockDefault, pollMs = 2000, standIn: injected = null} = {}) {
     const sources = new Map(), sourceReads = new Map(), watchers = new Set(), pollers = new Set(), once = new Set();
     let recovered = null, capabilityPoll = null;
-    let generationAvailable = false, generationGone = false, generationProbe = null, generationRetry = null, generationAttempts = 0;
+    let generationAvailable = false, generationGone = false, generationProbe = null, generationRetry = null, generationAttempts = 0, generationStalled = false, generationAsking = false;
     let disposed = false; const uploads = new Set();
     const session = holdSession();
     let activeProject = null, sessionTimer = null, sessionWrites = Promise.resolve();
@@ -217,6 +217,12 @@ export function createEditorStore(api, {t = en => en, notify = () => {}, onGener
         if (query.id) return copy(memoryProjects.get(query.id) || (query.id === 'memory' ? memoryProjects.get('memory') : null));
         return copy([...memoryProjects.values()].find(record => record.tracks[0].clips[0]?.source?.id === query.work) || null);
     }
+    // A list keeps how many damaged records the server left out of it.
+    function counted(value) {
+        const items = Array.isArray(value?.items) ? value.items : [];
+        const unreadable = Number.isSafeInteger(value?.unreadable) && value.unreadable > 0 ? value.unreadable : 0;
+        return Object.defineProperty(items, 'unreadable', {value: unreadable});
+    }
     // lost: called once after three reads in a row fail; the watch then stops.
     function watch(read, deliver, lost = null) {
         let failures = 0, poller = null;
@@ -233,7 +239,7 @@ export function createEditorStore(api, {t = en => en, notify = () => {}, onGener
     }
     function askGenerationAgain() {
         const delay = [2000, 5000, 15000, 30000][generationAttempts++];
-        if (delay === undefined) return;
+        if (delay === undefined) { generationStalled = true; return; }
         const timer = clock.setTimeout(() => { retry.dispose(); store.generationReady(); }, delay);
         const retry = generationRetry = {dispose() { clock.clearTimeout(timer); pollers.delete(retry); if (generationRetry === retry) generationRetry = null; }};
         pollers.add(retry);
@@ -257,6 +263,15 @@ export function createEditorStore(api, {t = en => en, notify = () => {}, onGener
         get generationAvailable() { return standIn ? standIn.generationAvailable ?? true : generationAvailable; },
         // The server said for certain it cannot generate (not just a missed answer that is asked again).
         get generationGone() { return !standIn && generationGone; },
+        // Every automatic check went unanswered: the page offers to check again. It stays so until an answer comes.
+        get generationStalled() { return !standIn && generationStalled && !generationAvailable && !generationGone; },
+        get generationChecking() { return !standIn && generationAsking; },
+        // Checks now and starts the automatic checks over; the page is told of every answer as before.
+        retryGeneration() {
+            if (standIn || generationAvailable || generationGone || disposed) return Promise.resolve(generationAvailable);
+            generationRetry?.dispose(); generationAttempts = 0;
+            return store.generationReady();
+        },
         generationReady() {
             if (standIn) return standIn.generationReady
                 ? Promise.resolve(standIn.generationReady(ready => { if (!disposed) onGenerationReady(ready); }))
@@ -273,14 +288,14 @@ export function createEditorStore(api, {t = en => en, notify = () => {}, onGener
                     controller.abort(); resolve(null);
                 }, 5000); });
                 const probe = {dispose() { clock.clearTimeout(timer); controller.abort(); finish(null); pollers.delete(probe); }};
-                pollers.add(probe);
+                pollers.add(probe); generationAsking = true; if (!disposed) onGenerationChecking();
                 try {
                     // true: present; false: no such route; null: no usable answer.
                     answer = await Promise.race([Promise.resolve().then(() => request('/freevideo/chains', {signal: controller.signal}))
                         .then(async response => response.status === 404 ? false
                             : response.ok && Array.isArray((await response.json())?.chains) ? true : null)
                         .catch(() => null), timeout]);
-                } finally { probe.dispose(); generationProbe = null; }
+                } finally { probe.dispose(); generationProbe = null; generationAsking = false; }
                 if (disposed || generationGone) return false;
                 if (answer === false) generationAbsent();
                 else if (answer) { generationAvailable = true; onGenerationReady(true); }
@@ -324,10 +339,7 @@ export function createEditorStore(api, {t = en => en, notify = () => {}, onGener
                 if (recovered) break;
             }
         }, load: id => load({id}), byWork: work => load({work}),
-        async projects() {
-            const value = await json('/freevideo/editor/projects', undefined, {items: []});
-            return value.items || [];
-        },
+        async projects() { return counted(await json('/freevideo/editor/projects', undefined, {items: []})); },
         createSaveQueue(state, {onStatus = () => {}} = {}) {
             const queue = createSaveQueue({clock, session, onStatus, initial: state.record, getRecord: () => state.record, copySuffix: t(' (copy)', '（副本）'), write: (record, create, operation) => { const options = post({project: record, operation, ...(create ? {create} : {})}); return request('/freevideo/editor/project', {...options, keepalive: new TextEncoder().encode(options.body).length < 60000}); },
                 read: id => store.load(id),
@@ -377,7 +389,7 @@ export function createEditorStore(api, {t = en => en, notify = () => {}, onGener
             if (Object.keys(fallback).length) cache(fallback);
             return value;
         },
-        async imports() { return (await json('/freevideo/editor/imports', undefined, {items: []})).items || []; },
+        async imports() { return counted(await json('/freevideo/editor/imports', undefined, {items: []})); },
         watchImports(fn) { return watch(() => store.imports(), items => { fn(items); return true; }); },
         upload(file, progress = () => {}) {
             if (disposed) return Promise.reject(new Error('editor_closed'));

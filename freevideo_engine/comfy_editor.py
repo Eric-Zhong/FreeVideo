@@ -503,7 +503,7 @@ def save(output_directory, record, create=None, operation=None):
     return record
 
 
-def _projects(root, *, strict=False):
+def _projects(root, *, strict=False, unreadable=None):
     folder = _editor_path(root, 'projects')
     if not folder.exists():
         return []
@@ -517,9 +517,14 @@ def _projects(root, *, strict=False):
             record = _read_project(root, path.name)
             info = _project_path(root, path.name).stat()
             records.append((info.st_mtime_ns, path.name, record, info))
+        except FileNotFoundError:
+            if strict:
+                raise ValueError('Editor references unavailable') from None
         except (OSError, ValueError, TypeError, RecursionError):
             if strict:
                 raise ValueError('Editor references unavailable') from None
+            if unreadable is not None:
+                unreadable.append(path.name)
     return sorted(records, key=lambda row: row[:2], reverse=True)
 
 
@@ -578,10 +583,11 @@ def duration(record):
     return max((clip['start'] + clip['frames'] for track in record['tracks'] for clip in track['clips']), default=0)
 
 
-def list_projects(root):
+def list_projects(root, unreadable=None):
+    """Readable projects, newest first; damaged records are named in the optional `unreadable` list."""
     rows = []
     with _STATE:
-        records = _projects(root)
+        records = _projects(root, unreadable=unreadable)
     for _, identity, record, info in records:
         first = next(iter(record['tracks'][0]['clips']), None)
         cover = sources(root, [source_key(first['source'])]) if first and first['source'] else {}
@@ -829,7 +835,9 @@ def _import_update(root, identity, **fields):
         return value
 
 
-def list_imports(root):
+def list_imports(root, unreadable=None):
+    """Imports, newest first; damaged records are named in the optional `unreadable` list. A folder whose
+    record was never written is an upload that did not finish, not a damaged one."""
     folder = _editor_path(root, 'imports')
     if not folder.exists():
         return []
@@ -850,8 +858,11 @@ def list_imports(root):
                 row['preview'] = '/freevideo/editor/media?' + urlencode(dict(id=child.name, file='preview')) if value['state'] == 'ready' else None
                 row['thumbnail'] = '/freevideo/editor/media?' + urlencode(dict(id=child.name, file='thumbnail')) if value['state'] == 'ready' else None
                 rows.append((stamp, child.name, row))
-            except (OSError, ValueError, TypeError):
+            except FileNotFoundError:
                 continue
+            except (OSError, ValueError, TypeError):
+                if unreadable is not None:
+                    unreadable.append(child.name)
     return [row for _, _, row in sorted(rows, key=lambda item: item[:2], reverse=True)]
 
 
@@ -1269,7 +1280,9 @@ def register():
 
     @endpoint('get', '/freevideo/editor/projects')
     async def projects(request):
-        return web.json_response(dict(items=await asyncio.to_thread(list_projects, root())), headers=_HEADERS)
+        unreadable = []
+        items = await asyncio.to_thread(list_projects, root(), unreadable)
+        return web.json_response(dict(items=items, unreadable=len(unreadable)), headers=_HEADERS)
 
     @endpoint('get', '/freevideo/editor/project')
     async def project(request):
@@ -1353,7 +1366,9 @@ def register():
 
     @endpoint('get', '/freevideo/editor/imports')
     async def imports(request):
-        return web.json_response(dict(items=await asyncio.to_thread(list_imports, root())), headers=_HEADERS)
+        unreadable = []
+        items = await asyncio.to_thread(list_imports, root(), unreadable)
+        return web.json_response(dict(items=items, unreadable=len(unreadable)), headers=_HEADERS)
 
     @endpoint('get', '/freevideo/editor/waveform')
     async def peaks(request):

@@ -117,7 +117,31 @@ WINDOWS_SMALL_HEAD8_FRAMES = 243
 # 960x544x243 went from head 4 with one block (10.37 s/step, 4.68 GiB) to
 # head 8 with none (8.43 s, 4.18 GiB).
 WINDOWS_INT8_HEAD8_TOKENS = 72576
+# Native FP8 (Ada and Blackwell) takes the same rule up to a two-pass first
+# pass. On a Blackwell card held to an 8 GiB laptop's 6.48 GiB allocator limit
+# with the Windows allocator (no expandable segments), 832x448x243 (26208 rows)
+# with two resident blocks and the second slot peaked 4.74 GiB reserved with
+# four heads and 5.03 with eight, 0.29 GiB against the 0.42 the rule charges at
+# this length.
+# Full-resolution FP8 stays on four heads until it is measured.
+WINDOWS_FP8_HEAD8_TOKENS = 4 * 9072
 WINDOWS_INT8_HEAD8_EXTRA = int(1.15 * GiB)
+# Beyond that row count the four-head plan stayed on 12 GB cards although the
+# budget covers eight heads. Reserved peak of eight heads and no resident
+# block, complete requests with the allocator capped at 10.48 GiB and the
+# Windows allocator emulated (no expandable segments), 1344x768:
+#
+#    72576 rows   7.04 GiB    97776 rows   9.40    107856 rows   10.23
+#
+# Four heads with two blocks at 97776 rows reserved 8.81 here and 9.31 under
+# Windows on an RTX 3060, so 0.5 GiB is added for the Windows allocator and
+# compositor. Eight heads charge the larger of the figure below and the plan at
+# 72576 rows, which keeps the requirement continuous there and never lower than
+# before. Frames do not matter, only rows: the figures come from 243, 328 and
+# 360 frames.
+WINDOWS_INT8_LONG_HEAD8_TOKENS = 107856
+WINDOWS_INT8_LONG_HEAD8_BASE = int(7.54 * GiB)
+WINDOWS_INT8_LONG_HEAD8_PER_ROW = .0937 * GiB / 1000
 WINDOWS_INT8_HEAD8_AMPERE_EXTRA = int(.3 * GiB)
 # Below that band an 8 GiB card stages the residual stream, and the staged
 # pass kept four heads. With the Windows allocator (no expandable segments)
@@ -1170,15 +1194,27 @@ def _choose(hardware: Hardware, *, vram_gib=None, ram_gib=None, attention='auto'
                               and effective_tokens is not None
                               and canvas['frames'] <= WINDOWS_SMALL_HEAD8_FRAMES
                               and effective_tokens <= WINDOWS_SMALL_HEAD8_TOKENS)
-        windows_int8_full = (desktop and int8 and not lora and legs == ['sage2', 'sage2']
+        windows_int8_full = (desktop and not lora and legs == ['sage2', 'sage2']
                              and effective_tokens is not None
                              and canvas['frames'] <= WINDOWS_SMALL_HEAD8_FRAMES
-                             and WINDOWS_SMALL_HEAD8_TOKENS < effective_tokens <= WINDOWS_INT8_HEAD8_TOKENS)
+                             and WINDOWS_SMALL_HEAD8_TOKENS < effective_tokens
+                             <= (WINDOWS_INT8_HEAD8_TOKENS if int8 else 0 if ampere else WINDOWS_FP8_HEAD8_TOKENS))
         windows_int8_staged_head8 = (desktop and int8 and not lora and legs == ['sage2', 'sage2']
                                      and effective_tokens is not None
                                      and canvas['frames'] <= WINDOWS_SMALL_HEAD8_FRAMES
                                      and effective_tokens <= WINDOWS_INT8_STAGED_HEAD8_TOKENS)
+        windows_int8_long = (desktop and int8 and not lora and legs == ['sage2', 'sage2']
+                             and effective_tokens is not None
+                             and not (canvas.get('reference_video_tokens') or canvas.get('reference_audio_tokens'))
+                             and WINDOWS_INT8_HEAD8_TOKENS < effective_tokens <= WINDOWS_INT8_LONG_HEAD8_TOKENS)
         reserves = SMALL_ACTIVATION_RESERVES
+        if windows_int8_long:
+            four = dict(SMALL_ACTIVATION_RESERVES)[4]
+            wanted = max(four + WINDOWS_INT8_HEAD8_EXTRA,
+                         WINDOWS_INT8_LONG_HEAD8_BASE
+                         + int(WINDOWS_INT8_LONG_HEAD8_PER_ROW * (effective_tokens - WINDOWS_INT8_HEAD8_TOKENS)))
+            reserves = tuple((heads, max(need, wanted - small_adjustment) if heads == 8 else need)
+                             for heads, need in reserves)
         if windows_int8_full:
             four = dict(SMALL_ACTIVATION_RESERVES)[4]
             extra = int(WINDOWS_INT8_HEAD8_EXTRA * effective_tokens / WINDOWS_INT8_HEAD8_TOKENS)
@@ -1195,7 +1231,7 @@ def _choose(hardware: Hardware, *, vram_gib=None, ram_gib=None, attention='auto'
             selected = (head, activation_bytes(head, effective_tokens) - GPU_ATTENTION_OUTPUT_BYTES)
         else:
             available = [(heads, need) for heads, need in reserves
-                         if heads <= 4 or not desktop or ((windows_small_head8 or windows_int8_full)
+                         if heads <= 4 or not desktop or ((windows_small_head8 or windows_int8_full or windows_int8_long)
                              and gpu_budget >= need + small_adjustment + GPU_ATTENTION_OUTPUT_BYTES)]
             selected = next(((heads, need + small_adjustment) for heads, need in available
                              if gpu_budget >= need + small_adjustment), None)

@@ -1,0 +1,126 @@
+{
+  "version": "2.56.0",
+  "micromamba": {
+    "version": "2.9.0-0",
+    "url": "https://github.com/mamba-org/micromamba-releases/releases/download/2.9.0-0/micromamba-osx-arm64",
+    "sha256": "ec2a072f028e1a7cf20f3e2e74d5a8127cf5a5f27636375b5359811565f4e5be",
+    "bytes": 14596096
+  },
+  "channels": {
+    "official": "https://conda.anaconda.org/conda-forge",
+    "tuna": "https://mirrors.tuna.tsinghua.edu.cn/anaconda/cloud/conda-forge",
+    "nju": "https://mirror.nju.edu.cn/anaconda/cloud/conda-forge"
+  },
+  "packages": [
+    {
+      "path": "osx-arm64/libexpat-2.8.5-h6111c0a_0.conda",
+      "sha256": "50aa761b83fc7a116ca88fe0cb4cefce5abababb10a926bf8afbafd5c298d102",
+      "bytes": 69565
+    },
+    {
+      "path": "osx-arm64/perl-5.44.0-1_hb001647_perl5.conda",
+      "sha256": "d68a8d9a8f329e46920d7750b495f613e093fa40736d00a227b727f5898804bb",
+      "bytes": 10327598
+    },
+    {
+      "path": "osx-arm64/libiconv-1.18-he4c29f2_3.conda",
+      "sha256": "689a14968267f2f97c07112fca5636e7d756036b9aee969911267c20bd3eea1f",
+      "bytes": 750816
+    },
+    {
+      "path": "osx-arm64/libzlib-1.3.2-h8088a28_3.conda",
+      "sha256": "a18fa5d5bac452401459f966cf0d872224e8080c4ff93c77e168d43ab42ef9d7",
+      "bytes": 47822
+    },
+    {
+      "path": "osx-arm64/bzip2-1.0.8-h4e30115_10.conda",
+      "sha256": "8ec22f0ba25cbfc2e64d70cf29459eccd7ffdf6436f6a6ff15bbfef799f7d4f6",
+      "bytes": 124965
+    },
+    {
+      "path": "osx-arm64/libcxx-23.1.4-h55c6f16_2.conda",
+      "sha256": "9c390b4f403db32346754ccef6b84b7e5d9b70cb6d76258fd23b05f2db2ab216",
+      "bytes": 577255
+    },
+    {
+      "path": "osx-arm64/libev-4.33-h1a92334_3.conda",
+      "sha256": "c0100064506ae8abb432c5a506d474f10af2cf48c33d62bc221fb28b6d6ff6ac",
+      "bytes": 39991
+    },
+    {
+      "path": "osx-arm64/c-ares-1.34.9-h74c22ad_0.conda",
+      "sha256": "74b52d784b3576643da3aea1240a4120c1f25ee057f14ae5a89e8a7b3fb2e69f",
+      "bytes": 201979
+    },
+    {
+      "path": "osx-arm64/ncurses-6.6-he64c551_1.conda",
+      "sha256": "7024a48c8c0d0114ed4ab53c76bf9275d50e91ba7cea367a9aead638d3c29c68",
+      "bytes": 804298
+    },
+    {
+      "path": "osx-arm64/icu-78.3-py310h579977c_2.conda",
+      "sha256": "6cdb5dee54c72e56ab189fb3ad33cb28533553d42590e7e831160248f4416a43",
+      "bytes": 14070242
+    },
+    {
+      "path": "osx-arm64/libintl-0.25.1-hae62183_2.conda",
+      "sha256": "b43c6645e668f86d04d5c06d6dc17efe921bbd9244be4b77946d56fb950a3fcc",
+      "bytes": 90024
+    },
+    {
+      "path": "osx-arm64/zstd-1.5.7-hf451053_7.conda",
+      "sha256": "da867f5092eb0cb746d353694f0098031fd9817a4ce7d5743121209ae0f406ca",
+      "bytes": 433687
+    },
+    {
+      "path": "osx-arm64/pcre2-10.47-he63d830_1.conda",
+      "sha256": "f8c415329b542e1fca1ff2917b80e687c18302dfa0353530668b90cb225b494f",
+      "bytes": 851704
+    },
+    {
+      "path": "osx-arm64/libedit-3.1.20260512-pl5321h26f1114_0.conda",
+      "sha256": "5692a969e49b200c7874d1e869d281753361980b2ecfe9191b571d7e550f8b92",
+      "bytes": 108512
+    },
+    {
+      "path": "osx-arm64/libpsl-0.23.1-hdb0c161_1.conda",
+      "sha256": "c8c3153df39abedf3413483f672151ad70f1adb0c06c192bdf7ec432c3616b07",
+      "bytes": 72673
+    },
+    {
+      "path": "noarch/ca-certificates-2026.10.23-hbd8a1cb_0.conda",
+      "sha256": "95619b9c1184be7175392eeb0ee7eeb5ccf25d280951f4225f2d62e725790be3",
+      "bytes": 130057
+    },
+    {
+      "path": "osx-arm64/openssl-3.6.5-h55eecbc_0.conda",
+      "sha256": "44fbc526456571a9fb8fa18157f6f269d4d4bd40eef20183a93b9c9296f94497",
+      "bytes": 3111573
+    },
+    {
+      "path": "osx-arm64/libssh2-1.11.1-hbf2880b_1.conda",
+      "sha256": "a056e518c3d2d09fbb1778cea80c0c95338fb24adf1a817bbf90fb484850a304",
+      "bytes": 280492
+    },
+    {
+      "path": "osx-arm64/krb5-1.22.2-h34f8a20_2.conda",
+      "sha256": "aaea1d42b07769920db2af7471ece9399d2613448863da64ad8272998db5db34",
+      "bytes": 1165740
+    },
+    {
+      "path": "osx-arm64/libnghttp2-1.68.1-h435687b_1.conda",
+      "sha256": "445440d8cccccb6585f71d1eb7c949d64a2af2ced5481d924621424ff3b6a398",
+      "bytes": 567024
+    },
+    {
+      "path": "osx-arm64/libcurl-8.23.0-h6651222_0.conda",
+      "sha256": "d9f60525b665e50da15c84fcb4e74e6b1f0a56ea4c89a02d4258f23c3fe1f02c",
+      "bytes": 425637
+    },
+    {
+      "path": "osx-arm64/git-2.56.0-pl5440h66f49b9_0.conda",
+      "sha256": "2faaa571f7da2dd0b17f54ddb8a0437c9bde290af2202257c75ba73889819975",
+      "bytes": 13480930
+    }
+  ]
+}

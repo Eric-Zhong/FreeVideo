@@ -395,14 +395,14 @@ def probe_score(row, family):
 
 
 def plan(spec, versions, layout='unified', *, mode='auto', timeout=5, offline=False, env=None,
-         model_only=False, measure_speed=True, progress=None, proxy_mode='auto'):
+         model_only=False, measure_speed=True, progress=None, proxy_mode='auto', git_available=True):
     from .environments import ENVIRONMENTS, environment_names
     env = proxy_environment(env)
     started = time.monotonic()
     if proxy_mode not in proxy.MODES:
         raise ValueError('Unknown download connection mode')
     proxy_configured = proxy.configured(env)
-    git_keys = [] if offline or model_only else proxy.git_proxy_keys(env)
+    git_keys = [] if offline or model_only or not git_available else proxy.git_proxy_keys(env)
     families = ['pypi', 'models', 'vdn-models', 'image-models', 'github', 'git', 'cuda']
     if spec['models'].get('edge_modelscope'):
         families.insert(3, 'edge-models')
@@ -422,8 +422,15 @@ def plan(spec, versions, layout='unified', *, mode='auto', timeout=5, offline=Fa
         if mode != 'official' and configured_source(group, env):
             names.insert(0, 'user')
         selections[family] = []
-        routes = proxy.routes(env, git=family == 'git', mode=proxy_mode)
+        routes = proxy.routes(env, git=family == 'git' and git_available, mode=proxy_mode)
         jobs += [(family, name, route) for name in names for route in routes]
+    # Without a usable Git, any `git` on PATH may be Apple's tool launcher,
+    # which opens an installation dialog when run. Leave those sources unmeasured.
+    skipped = [job for job in jobs if job[0] == 'git' and not git_available and not offline]
+    if skipped:
+        jobs = [job for job in jobs if job not in skipped]
+        for family, name, route in skipped:
+            selections[family].append({'id': name, 'route': route, 'ok': None, 'score': 0, 'scope': 'Git not available yet; not measured'})
     if offline:
         for family, name, route in jobs:
             selections[family].append({'id': name, 'route': route, 'ok': None, 'scope': 'Offline fixture; not measured'})

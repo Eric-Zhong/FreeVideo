@@ -5,6 +5,7 @@ import csv
 from contextlib import ExitStack, contextmanager
 import hashlib
 import json
+import shlex
 import logging
 import os
 from pathlib import Path
@@ -798,12 +799,16 @@ def plan(args, *, local_progress=None, stage=None):
     if reuse_cache and not cache_compatible(reuse_cache, **cache_format):
         errors.append('--cache must contain a prepared FP8 cache compatible with this GPU scale format.')
     from .download_settings import read as download_preferences
+    def native_git_available():
+        from .macos_bootstrap import available_git
+        return available_git() is not None
     if stage:
         stage('Testing download sources')
     networking = network.plan(json.loads((PACKAGE / 'dependencies.json').read_text(encoding='utf-8')),
         bootstrap_versions(json.loads((PACKAGE / 'bootstrap_versions.json').read_text(encoding='utf-8')), system), layout,
         mode=getattr(args, 'network', 'auto'), timeout=getattr(args, 'network_timeout', 5),
         offline=bool(args.hardware_json or errors),
+        git_available=not mac_target or bool(args.hardware_json) or native_git_available(),
         env=dict(os.environ, FREEVIDEO_HOME=str(root)),
         proxy_mode=download_preferences(root / 'download-settings.json')['proxy_mode'],
         progress=(lambda message: stage('Testing download sources', message['done'], message['total'])) if stage else None)
@@ -1916,19 +1921,22 @@ class Installer:
 
     def install_git_linux(self):
         """Git from conda-forge, pinned by package hashes, when the system has none new enough."""
-        spec = json.loads((PACKAGE / 'git_linux.json').read_text(encoding='utf-8'))
+        self.install_git_conda('git_linux.json', 'git-linux', self.fetch_git_linux)
+
+    def install_git_conda(self, filename, folder, fetch, wrapper=False):
+        spec = json.loads((PACKAGE / filename).read_text(encoding='utf-8'))
         prefix = self.root / 'tools' / ('git-' + spec['version'])
         executable = prefix / 'bin' / 'git'
         receipt, content = prefix / '.freevideo-git.json', {k: spec[k] for k in ('version', 'packages')}
         if not (receipt.is_file() and json.loads(receipt.read_text(encoding='utf-8')) == content and executable.is_file()):
-            micromamba, packages = self.fetch_git_linux(spec)
+            micromamba, packages = fetch(spec)
             # conda writes the prefix into the installed files, so the
             # environment is created in place; an interrupted one is replaced.
             if prefix.is_symlink():
                 prefix.unlink()
             elif prefix.exists():
                 shutil.rmtree(prefix)
-            explicit = self.root / 'downloads' / 'git-linux' / 'explicit.txt'
+            explicit = self.root / 'downloads' / folder / 'explicit.txt'
             explicit.write_text('@EXPLICIT\n' + ''.join(path.resolve().as_uri() + '\n' for path in packages), encoding='utf-8')
             cache = self.root / 'tools' / 'micromamba-root'
             env = {k: v for k, v in self.env.items() if not k.upper().startswith(('CONDA', 'MAMBA'))}
@@ -1943,7 +1951,15 @@ class Installer:
         # the other tools of the environment.
         links = self.root / 'tools' / 'git-bin'
         links.mkdir(parents=True, exist_ok=True)
-        if not (links / 'git').is_symlink() or Path(os.readlink(links / 'git')) != executable:
+        if wrapper:
+            # macOS resolves @loader_path from the path it was started by, so a script
+            # starts the real executable instead of a link to it.
+            text = '#!/bin/sh\nexec %s "$@"\n' % shlex.quote(str(executable))
+            if not (links / 'git').is_file() or (links / 'git').is_symlink() or (links / 'git').read_text(encoding='utf-8') != text:
+                (links / 'git').unlink(missing_ok=True)
+                (links / 'git').write_text(text, encoding='utf-8')
+                (links / 'git').chmod(0o755)
+        elif not (links / 'git').is_symlink() or Path(os.readlink(links / 'git')) != executable:
             (links / 'git').unlink(missing_ok=True)
             (links / 'git').symlink_to(executable)
         self.env['PATH'] = str(links) + os.pathsep + self.env['PATH']

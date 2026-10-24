@@ -4,6 +4,7 @@ from urllib.parse import urlsplit
 
 from .jobs import JobError
 from .. import proxy_identity
+from ..origin_scheme import effective_scheme
 
 
 def peer_address(request):
@@ -63,8 +64,9 @@ def check(request, *, local=False, lan=False):
         if origin is not None:
             parsed = urlsplit(origin)
             port = parsed.port or (443 if parsed.scheme == 'https' else 80)
-            own_port = host.port or (443 if scheme == 'https' else 80)
-            if (parsed.scheme != scheme or parsed.hostname != host.hostname or port != own_port
+            wanted = scheme if proxied else effective_scheme(request, parsed.scheme)
+            own_port = host.port or (443 if wanted == 'https' else 80)
+            if (parsed.scheme != wanted or parsed.hostname != host.hostname or port != own_port
                     or parsed.path or parsed.query or parsed.fragment or parsed.username or parsed.password):
                 raise ValueError
     except (ValueError, TypeError, IndexError):

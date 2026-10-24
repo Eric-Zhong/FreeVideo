@@ -23,6 +23,7 @@ from urllib.parse import urlencode, urlsplit
 from aiohttp import ClientSession, ClientTimeout, DummyCookieJar, TCPConnector, WSMsgType, client_exceptions, web
 from yarl import URL
 from . import proxy_identity, lan_password
+from .origin_scheme import effective_scheme
 from .lan_auth import PasswordAuth, DEVICE_COOKIE, REMEMBER_SECONDS, LOGIN_DELAY
 
 PHONE_WEB = Path(__file__).resolve().parents[1] / 'web'
@@ -81,17 +82,18 @@ def same_origin(request):
     try:
         if len(request.headers.getall('Host', [])) != 1 or len(request.headers.getall('Origin', [])) != 1:
             return False
-        host = urlsplit(request.scheme + '://' + request.host)
         origin = urlsplit(request.headers['Origin'])
+        scheme = effective_scheme(request, origin.scheme)
+        host = urlsplit(scheme + '://' + request.host)
         socket = request.transport.get_extra_info('sockname')
         allowed = {socket[0].split('%')[0]}
         if ipaddress.ip_address(socket[0].split('%')[0]).is_loopback:
             allowed.update(('localhost', '127.0.0.1', '::1'))
-        own_port = host.port or (443 if request.scheme == 'https' else 80)
+        own_port = host.port or (443 if scheme == 'https' else 80)
         return (host.hostname in allowed and own_port == socket[1] and origin.hostname == host.hostname
                 and (origin.port or (443 if origin.scheme == 'https' else 80)) == own_port
-                and origin.scheme == request.scheme and not any((origin.path, origin.query, origin.fragment,
-                                                                origin.username, origin.password)))
+                and origin.scheme == scheme and not any((origin.path, origin.query, origin.fragment,
+                                                         origin.username, origin.password)))
     except (ValueError, TypeError, IndexError, KeyError):
         return False
 

@@ -23,6 +23,7 @@ from fractions import Fraction
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from urllib.parse import unquote, urlencode, urlsplit
 
+from .origin_scheme import effective_scheme
 from .comfy_library import _ID, _plain, _video
 from .system import windows
 from .editor_frames import frame_not_after, last_frame_end
@@ -1198,10 +1199,11 @@ def _local_page(request):
     try:
         parsed = urlsplit(origin)
         host = urlsplit('//' + request.host)
-        return (parsed.scheme in ('http', 'https') and parsed.scheme == request.scheme and not parsed.username
+        scheme = effective_scheme(request, parsed.scheme)
+        return (parsed.scheme in ('http', 'https') and parsed.scheme == scheme and not parsed.username
                 and not parsed.password and not parsed.path and not parsed.query and not parsed.fragment
                 and parsed.hostname == host.hostname
-                and (parsed.port or (443 if parsed.scheme == 'https' else 80)) == (host.port or (443 if request.scheme == 'https' else 80)))
+                and (parsed.port or (443 if parsed.scheme == 'https' else 80)) == (host.port or (443 if scheme == 'https' else 80)))
     except ValueError:
         return False
 
@@ -1215,7 +1217,7 @@ def _same_origin_audio(request):
     if referer:
         try:
             page = urlsplit(referer)
-            origin = urlsplit(request.scheme + '://' + request.host)
+            origin = urlsplit(effective_scheme(request, page.scheme) + '://' + request.host)
             return (page.scheme == origin.scheme and page.hostname == origin.hostname
                     and (page.port or (443 if page.scheme == 'https' else 80)) ==
                         (origin.port or (443 if origin.scheme == 'https' else 80))

@@ -63,6 +63,7 @@ export async function previewUnsupported(response, field) {
 }
 export async function sendChatMessage(api, entry, {sessionSupported = true, stopped = () => false, previewField = null} = {}) {
     const body = {id: entry.id, text: entry.text};
+    if (entry.attachments?.length) body.attachments = entry.attachments.map(({preview, ...rest}) => rest);
     if (sessionSupported && entry.session) body.session = entry.session;
     if (entry.whiteboxPreview && previewField) body[previewField] = true;
     entry.attempts = (entry.attempts || 0) + 1;

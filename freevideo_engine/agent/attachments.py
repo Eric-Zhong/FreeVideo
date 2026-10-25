@@ -1,4 +1,5 @@
 """Chat images in the retained input assets directory, with server-owned filenames."""
+import filecmp
 import json
 import os
 from pathlib import Path
@@ -48,7 +49,11 @@ def publish(input_root, temporary, name, original_name):
                 os.replace(pending, metadata)
             finally:
                 pending.unlink(missing_ok=True)
-        os.replace(temporary, target)
+        # Identical bytes are already in place; replacing a file the page is reading fails on Windows.
+        if target.is_file() and filecmp.cmp(temporary, target, shallow=False):
+            Path(temporary).unlink(missing_ok=True)
+        else:
+            os.replace(temporary, target)
         return json.loads(metadata.read_text(encoding='utf-8'))['original_name']
 
 

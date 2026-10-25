@@ -24,6 +24,8 @@ IMAGE_ASPECTS = {'1:1': (1024, 1024), '16:9': (1344, 768), '9:16': (768, 1344),
 MAX_UPLOAD_BYTES = 2 * 1024 ** 3
 MAX_JSON_UPLOAD_BYTES = 96 * 1024 ** 2
 MAX_BODY_BYTES = 1024 * 1024
+MAX_CHAT_ATTACHMENT_BYTES = 10 * 1024 ** 2
+MAX_CHAT_ATTACHMENTS = 4
 
 
 def obj(properties=None, required=(), **kw):
@@ -70,6 +72,22 @@ CLIENT_WAIT = number(0, 25, default=25)
 # Waiting for the user's words is longer: a person types slowly, and each wait is one tool call.
 INBOX_WAIT = number(0, default=0, description='x-clamp caps accepted wait values at 50 seconds without rejecting larger values.', **{'x-clamp': 50})
 CHAT_ID = string(64, pattern=r'^[A-Za-z0-9_-]{1,64}$')
+CHAT_ATTACHMENT_NAME = string(69, pattern=r'^[0-9a-f]{64}\.(png|jpg|jpeg|webp)$')
+CHAT_ATTACHMENT = obj(dict(name=CHAT_ATTACHMENT_NAME, original_name=string(255),
+                           width=number(1, integer=True), height=number(1, integer=True)),
+                      ('name', 'original_name', 'width', 'height'))
+
+
+def chat_request():
+    # Upload metadata supplied by the page is ignored; only the stored name is authoritative.
+    attachment = obj(dict(name=CHAT_ATTACHMENT_NAME, original_name={}, width={}, height={}, bytes={}), ('name',))
+    return obj(dict(text=dict(type='string', minLength=0, maxLength=8000), id=CHAT_ID,
+                    session=SESSION, whitebox={'type': 'boolean'},
+                    attachments=array(attachment, 0, MAX_CHAT_ATTACHMENTS)), ('text', 'id'),
+               **{'if': {'required': ['attachments'], 'properties': {'attachments': {'minItems': 1}}},
+                  'else': {'properties': {'text': string(8000)}}})
+
+
 EMPTY = obj()
 
 
@@ -447,7 +465,7 @@ def contracts(*, local=False):
             ('/connect/reset', 'POST', EMPTY), ('/chat', 'GET', None), ('/chat/now', 'GET', None),
             ('/chat/video', 'GET', None), ('/chat/list', 'GET', None), ('/chat/new', 'POST', EMPTY),
             ('/chat/delete', 'POST', obj({'session': SESSION, 'stop': {'type': 'boolean'}}, ('session',))),
-            ('/chat', 'POST', obj({'text': string(8000), 'id': CHAT_ID, 'session': SESSION, 'whitebox': {'type': 'boolean'}}, ('text', 'id'))),
+            ('/chat', 'POST', chat_request()),
             ('/chat/abandon', 'POST', obj({'session': SESSION})),
             ('/chat/confirm', 'POST', obj({'id': string(12, pattern=r'^cf[0-9a-f]{10}$'), 'approve': {'type': 'boolean'},
                                            'session': SESSION}, ('id', 'approve')))):
@@ -461,6 +479,13 @@ def contracts(*, local=False):
             query=obj({'client_id': string()}) if suffix != '/freevideo/progress' else EMPTY,
             **({'path': obj({'id': string()}, ('id',))} if '{id}' in suffix else {}))
     routes['GET', '/freevideo/agent/activity']['query'] = obj({'cursor': string(80)})
+    routes['POST', '/freevideo/agent/chat/attach'] = route(
+        'Upload one chat reference image as raw bytes (at most 10 MiB); requires a page cookie and CSRF.',
+        query=obj({'name': string(255, pattern=r'^[^/\\:\x00-\x1f]+$')}, ('name',)),
+        auth=False, local=True, raw_body=True, status=201)
+    routes['GET', '/freevideo/agent/chat/attachment'] = route(
+        'Read a saved chat image using the page cookie.', query=obj({'name': CHAT_ATTACHMENT_NAME}, ('name',)),
+        auth=False, local=True, page_cookie=True)
     routes['GET', '/freevideo/agent/chat']['query'] = obj({'after': number(0, integer=True), 'session': SESSION})
     routes['GET', '/freevideo/agent/chat/video']['query'] = obj({'id': string(43, pattern=r'^[0-9]{4}-[0-9]{2}-[0-9]{2}/[0-9a-f]{32}$')}, ('id',))
     for method, suffix, summary, extra in (
@@ -806,7 +831,7 @@ SESSION_OPERATIONS = {
     'create': ('POST', '/sessions', 'Create a work conversation for messages and plans shared with the user.'),
     'list': ('GET', '/sessions', 'List work conversations, most recently updated first.'),
     'get': ('GET', '/sessions/{id}', 'Read conversation metadata and whether the user stopped it.'),
-    'events': ('GET', '/sessions/{id}/events', 'Read events after a sequence number; wait up to 25 seconds or request an SSE stream.'),
+    'events': ('GET', '/sessions/{id}/events', 'Read events, including user image attachments (name, original_name, width, height); text may be empty with attachments. Wait up to 25 seconds or request an SSE stream.'),
     'post': ('POST', '/sessions/{id}/events', 'Append a message or plan for the user. Steps are recorded by the server.'),
     'stop': ('POST', '/sessions/{id}/stop', 'Only the page user may stop a work conversation.'),
     'resume': ('POST', '/sessions/{id}/resume', 'Only the page user may continue a work conversation.'),
@@ -848,6 +873,7 @@ def session_event(*, stored=False, agent_only=False):
             1, 20000), total_seconds=number(0)), ('type', 'shots'))]
     if not agent_only:
         variants[0]['properties']['mid'] = CHAT_ID
+        variants[0]['properties']['attachments'] = array(CHAT_ATTACHMENT, 1, MAX_CHAT_ATTACHMENTS)
         variants[0]['properties']['whitebox'] = {'type': 'boolean', 'description': 'The user chose a white-model preview for this request.'}
         from .errors import ERRORS
         variants += [obj(dict(type={'const': 'step'}, id=string(12, pattern=r'^st[0-9a-f]{10}$'),
@@ -1354,6 +1380,11 @@ def openapi():
                        **{str(status): {'description': 'Agent error', 'content': {'application/json': {'schema': {
                            'type': 'object', 'properties': {'error': {'$ref': '#/components/schemas/Error'}}}}}}
                           for status in sorted({r[0] for r in ERRORS.values() if r[0] >= 400})}})
+        if contract.get('auth') is False and (method != 'GET' or contract.get('page_cookie')):
+            operation['security'] = [{'page': []}]
+        if contract.get('raw_body'):
+            operation['requestBody'] = dict(required=True, content={'application/octet-stream': {'schema': {
+                'type': 'string', 'format': 'binary', 'maxLength': MAX_CHAT_ATTACHMENT_BYTES}}})
         if contract.get('page_or_token'):
             operation['security'] = [{'page': []}] if suffix.endswith(('/stop', '/resume')) else [{'bearer': []}, {'page': []}]
         if contract['body'] is not None:
@@ -1370,6 +1401,9 @@ def openapi():
                                     for k in re.findall(r'\{(.*?)\}', path)]
         if contract.get('idempotent'):
             operation['parameters'].append(dict(name='Idempotency-Key', **{'in': 'header'}, required=False, schema=REF))
+        if suffix == '/freevideo/agent/chat/attach':
+            operation['parameters'].append(dict(name='X-FreeVideo-CSRF', **{'in': 'header'}, required=True,
+                schema=string(128), description='The page session CSRF token.'))
         if contract.get('page_or_token'):
             operation['parameters'].append(dict(name='X-FreeVideo-CSRF', **{'in': 'header'}, required=False,
                 schema=string(128), description='Required with the freevideo_agent_page cookie, including reads.'))
@@ -1405,6 +1439,11 @@ def openapi():
         elif suffix == '/imports':
             response_schema = obj({'import': import_view()}, ('import',)) if method == 'POST' else obj(
                 {'items': array(import_view())}, ('items',))
+        elif suffix == '/freevideo/agent/chat/attach':
+            response_schema = obj(dict(CHAT_ATTACHMENT['properties'], bytes=number(1, MAX_CHAT_ATTACHMENT_BYTES, integer=True)),
+                                  (*CHAT_ATTACHMENT['required'], 'bytes'))
+        elif suffix == '/freevideo/agent/chat/attachment':
+            content_type, response_schema = 'image/png', {'type': 'string', 'format': 'binary'}
         elif suffix == '/editor/sources/content':
             content_type, response_schema = 'application/octet-stream', {'type': 'string', 'format': 'binary'}
         elif suffix.endswith('/file') or suffix.endswith('/thumbnail'):
@@ -1412,6 +1451,8 @@ def openapi():
             response_schema = {'type': 'string', 'format': 'binary'}
         success = operation['responses'][str(contract.get('status', 200))]
         success['content'] = {content_type: {'schema': response_schema}}
+        if suffix == '/freevideo/agent/chat/attachment':
+            success['content'].update({kind: {'schema': response_schema} for kind in ('image/jpeg', 'image/webp')})
         if suffix == '/sessions/{id}/events' and method == 'GET':
             success['content']['text/event-stream'] = {'schema': {'type': 'string'}}
         if contract.get('idempotent'):

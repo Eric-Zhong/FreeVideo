@@ -93,6 +93,8 @@ def media_item(value, path, *, image=False, frame_default=None, early=False):
     errors = contract.issues(contract.media(image, local=True, early=early), value, path)
     if errors:
         raise SpecError(errors)
+    if 'file' in value and re.fullmatch(contract.CHAT_ATTACHMENT_NAME['pattern'], value['file']):
+        value['file'] = 'freevideo/agent/assets/' + value['file']
     return value
 
 

@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 import re
 import shutil
+import time
 import zipfile
 
 from . import network
@@ -27,6 +28,30 @@ def verified(path, sha, size):
     return path.is_file() and path.stat().st_size == size and network.hash_file(path) == sha
 
 
+def publish(temporary, destination, delays=(0.25, 0.5, 1, 2, 2, 2, 2, 2)):
+    """Replace the tool with the extracted copy. Windows refuses the replacement while a scanner or a running
+    tool holds the file, so it is retried for a few seconds; an identical tool already in place is kept."""
+    error = None
+    for delay in (*delays, None):
+        try:
+            os.replace(temporary, destination)
+            return destination
+        except PermissionError as denied:
+            error = denied
+            if delay is None:
+                break
+            time.sleep(delay)
+    try:
+        same = destination.is_file() and destination.stat().st_size == temporary.stat().st_size \
+            and network.hash_file(destination) == network.hash_file(temporary)
+    except OSError:
+        same = False
+    if not same:
+        raise error
+    temporary.unlink(missing_ok=True)
+    return destination
+
+
 def extract(archive, destination, member, size=None):
     """Only extract the pinned executable, with bounded memory and atomic replacement."""
     destination.parent.mkdir(parents=True, exist_ok=True)
@@ -37,8 +62,7 @@ def extract(archive, destination, member, size=None):
             raise ValueError('Unexpected uv executable size in the verified archive')
         with source.open(info) as incoming, temporary.open('wb') as outgoing:
             shutil.copyfileobj(incoming, outgoing, 1024 * 1024)
-    os.replace(temporary, destination)
-    return destination
+    return publish(temporary, destination)
 
 
 def prepare_windows(root, uv, networking, env, fetch):

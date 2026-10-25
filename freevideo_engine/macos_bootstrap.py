@@ -38,6 +38,9 @@ def versions(value):
         uv=dict(UV, url=UV['sources']['official']), github_probe_url=value['uv']['url'])
 
 
+GIT_UNAVAILABLE = 'Git is unavailable. Check the network connection, or install Git (Apple Command Line Tools), then retry.'
+
+
 def available_git():
     executable = shutil.which('git')
     if not executable:
@@ -86,8 +89,6 @@ def preflight(args, snapshot=None, *, ram_gib=None, vram_gib=None):
         errors.append('CUDA device and SageAttention build options do not apply to Mac.')
     if vram_gib is not None:
         errors.append('Mac has one unified memory pool; use --ram-gib instead of a separate VRAM limit.')
-    if not snapshot.get('git'):
-        errors.append('Git is unavailable. Install or repair Git (Apple Command Line Tools), then retry.')
     total, available = hardware['ram_total'], hardware['ram_available']
     if any(type(n) is not int or n < 0 for n in (total, available)) or not 0 < total or available > total:
         raise ValueError('Invalid unified-memory observation')

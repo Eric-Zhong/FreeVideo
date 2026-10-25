@@ -1,10 +1,11 @@
 // The conversation with the connected agent: what the user says, what the agent answers, and the agent's jobs as
 // cards at the place they happened. Reads and sends use the page session; the agent's token never enters the page.
 import {agentGet, agentPost, retryAgentPost} from './agent_session.js';
+import {ATTACH, attachmentURL, pickPictures, thumbnail, uploadPicture} from './chat_attachments.js';
 import {SCENE_TEXT, sceneList, startScene, watchScene} from './whitebox_scenes.js';
 import {chatData, chatDelay, chatReadRequest, emptyChat, chatMerge, chatEntries, canSend, newId, SEND_ATTEMPTS, WAIT_FOR_AGENT, sendRefused, sendError} from './chat_data.js';
 export {emptyChat, chatMerge, chatEntries, canSend} from './chat_data.js';
-import {isolateDialogKeys, routeDialogKey} from './dialog_keys.js';
+import {isolateDialogKeys, listenDialogKey, routeDialogKey} from './dialog_keys.js';
 import {closeDialog} from './motion.js';
 import { estimatedFraction, remainingAbove, remainingShown, createDiagnosticReportControl } from './generation_progress.js';
 import {createErrorReport} from './error_panel.js';
@@ -259,7 +260,7 @@ export function agentChat(t, api, {open, edit, shown = () => true, changed = () 
         sendButton.classList.toggle('fv-chat-halt', stopMode);
         sendButton.setAttribute('aria-label', label); sendButton.title = stopMode ? label : '';
         sendButton.querySelector('path').setAttribute('d', stopMode ? STOP_GLYPH : SEND_GLYPH);
-        sendButton.disabled = stopMode ? false : !composeAllowed() || draftSending() || !input.value.trim();
+        sendButton.disabled = stopMode ? false : !composeAllowed() || draftSending() || !readyPictures().length && !input.value.trim() || stagedList().some(item => !item.attachment);
     }
     async function abandon() {
         const session = state.session;
@@ -319,7 +320,72 @@ export function agentChat(t, api, {open, edit, shown = () => true, changed = () 
             }
         } catch (failure) { sceneWaiting = false; say(t(...SCENE_TEXT.failed) + reason(failure)); }
     }
-    form.append(input, scenesButton, whiteboxButton, sendButton); scroller.append(log); main.append(scroller, down, sceneMenu, form); element.append(main);
+    // Pictures waiting to be sent, per conversation draft: {key, url, attachment|null}. A picture is uploaded the moment it is added.
+    const attachButton = press('fv-chat-attach', null, () => fileInput.click()), fileInput = el('input'), strip = el('ul', 'fv-chat-attached');
+    attachButton.append(glyph(ATTACH.icon)); attachButton.title = t(...ATTACH.add); attachButton.setAttribute('aria-label', attachButton.title);
+    fileInput.type = 'file'; fileInput.accept = ATTACH.types.join(','); fileInput.multiple = true; fileInput.hidden = true;
+    strip.hidden = true; strip.setAttribute('aria-label', t('Attached pictures', '已添加的图片'));
+    const staged = new Map(), uploads = new Set();
+    const stagedList = (session = draftSession) => { if (!staged.has(session)) staged.set(session, []); return staged.get(session); };
+    const readyPictures = () => stagedList().filter(item => item.attachment).map(item => ({...item.attachment, preview: item.url}));
+    function renderStrip() {
+        const list = stagedList();
+        strip.hidden = !list.length;
+        strip.replaceChildren(...list.map(item => {
+            const li = el('li'), drop = press('fv-chat-attached-x', '×', () => removePicture(item));
+            li.dataset.state = item.failed ? 'failed' : item.attachment ? 'ready' : 'uploading';
+            drop.title = t(...ATTACH.remove); drop.setAttribute('aria-label', drop.title);
+            li.append(thumbnail(item.url), drop);
+            // A picture that did not upload is tried again by clicking it.
+            if (item.failed === 'failed') {
+                li.tabIndex = 0; li.setAttribute('role', 'button'); li.title = t(...ATTACH.retry); li.setAttribute('aria-label', li.title);
+                li.addEventListener('click', event => { if (event.target === drop) return; void upload(item, list); });
+                li.addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); void upload(item, list); } });
+            }
+            return li;
+        }));
+        grow();
+    }
+    function removePicture(item) {
+        item.controller?.abort();
+        for (const list of staged.values()) { const at = list.indexOf(item); if (at >= 0) list.splice(at, 1); }
+        URL.revokeObjectURL?.(item.url); renderStrip(); input.focus();
+    }
+    async function upload(item, list, session = draftSession) {
+        item.controller = new AbortController(); item.failed = null; uploads.add(item); renderStrip();
+        try {
+            item.attachment = await uploadPicture(api, item.file, item.controller.signal);
+            // The same picture twice is one stored picture; the copy is dropped.
+            if (list.some(other => other !== item && other.attachment?.name === item.attachment.name)) removePicture(item);
+        } catch (failure) {
+            if (!failure?.problem) return;
+            // Unreadable pictures are taken out; an upload that failed stays, marked, to be tried again.
+            if (failure.problem === 'unreadable') { const at = list.indexOf(item); if (at >= 0) list.splice(at, 1); URL.revokeObjectURL?.(item.url); }
+            else item.failed = 'failed';
+            if (session === draftSession) say(t(...ATTACH[failure.problem]));
+        } finally { uploads.delete(item); if (!stopped && session === draftSession) renderStrip(); }
+    }
+    function addPictures(files) {
+        files = [...files || []];
+        if (!files.length || !composeAllowed()) return;
+        const session = draftSession, list = stagedList(session), {accepted, problem} = pickPictures(files, ATTACH.count - list.length);
+        say(problem ? t(...ATTACH[problem]) : '');
+        for (const file of accepted) {
+            const item = {name: file.name, file, url: URL.createObjectURL(file), attachment: null, failed: null, controller: null};
+            list.push(item); void upload(item, list, session);
+        }
+        renderStrip();
+    }
+    fileInput.addEventListener('change', () => { addPictures(fileInput.files); fileInput.value = ''; });
+    listenDialogKey(input, 'paste', event => {
+        const files = [...event.clipboardData?.files || []].filter(file => file.type.startsWith('image/'));
+        if (files.length) { event.preventDefault(); addPictures(files); }
+    });
+    for (const type of ['dragover', 'drop']) main.addEventListener(type, event => {
+        if (![...event.dataTransfer?.types || []].includes('Files')) return;
+        event.preventDefault(); if (type === 'drop') addPictures(event.dataTransfer.files);
+    });
+    form.append(strip, input, attachButton, scenesButton, whiteboxButton, sendButton, fileInput); scroller.append(log); main.append(scroller, down, sceneMenu, form); element.append(main);
     const notice = el('p', 'fv-chat-notice'); notice.hidden = true; notice.setAttribute('role', 'status');
     const noticeRow = el('div', 'fv-chat-notice-row'); noticeRow.append(notice); main.insertBefore(noticeRow, form);
     // What the next video would download first, the studio's line, above the box the request is typed in.
@@ -364,7 +430,7 @@ export function agentChat(t, api, {open, edit, shown = () => true, changed = () 
             saveDraft(); grow(); return;
         }
         if (draftSession === session) return;
-        saveDraft(); draftSession = session; input.value = drafts.get(session)?.text || ''; grow();
+        saveDraft(); draftSession = session; input.value = drafts.get(session)?.text || ''; renderStrip();
     }
     const reason = error => error?.message || t('Connection lost. Try again.', '连接中断，请重试。');
     async function requestError(response) {
@@ -711,9 +777,18 @@ export function agentChat(t, api, {open, edit, shown = () => true, changed = () 
     // ---- one entry of the conversation each ----
     function message(role) {
         const item = el('li', role === 'user' ? 'fv-chat-me' : 'fv-chat-ai'), text = el('p'); item.append(text);
-        let status = null, error = null, retry = null, report = null;
+        let status = null, error = null, retry = null, report = null, shown = '';
         return {element: item, update(entry) {
-            text.textContent = entry.text;
+            text.textContent = entry.text; text.hidden = !entry.text && !!entry.attachments?.length;
+            const names = (entry.attachments || []).map(picture => picture.name).join('|');
+            if (names !== shown) {
+                shown = names; item.querySelector('.fv-chat-refs')?.remove();
+                if (names) {
+                    const row = el('ul', 'fv-chat-refs');
+                    for (const picture of entry.attachments) { const li = el('li'); li.append(thumbnail(picture.preview || attachmentURL(api, picture.name))); row.append(li); }
+                    item.prepend(row);
+                }
+            }
             if (role !== 'user') return;
             item.dataset.taken = String(entry.taken !== false);
             item.dataset.failed = String(!!entry.error);
@@ -1159,19 +1234,24 @@ export function agentChat(t, api, {open, edit, shown = () => true, changed = () 
             drafts.delete(entry.session);
             if (draftSession === entry.session) { input.value = ''; grow(); }
         }
+        if (entry.attachments?.length) {
+            const list = stagedList(entry.session), sent = new Set(entry.attachments.map(item => item.name));
+            staged.set(entry.session, list.filter(item => !sent.has(item.attachment?.name)));
+            if (draftSession === entry.session) renderStrip();
+        }
     }
     const waitingNotice = code => (code ? code === 'not_listening' : state.agent.connected === true)
         ? t('Will send when Agent is back', '等 Agent 回来后自动发送')
         : t('Will send when Agent connects', '等 Agent 连上后自动发送');
-    async function send(text, original = null, draft = null, automatic = false) {
+    async function send(text, original = null, draft = null, automatic = false, attachments = null) {
         text = String(text).trim();
         original ||= pending.find(entry => entry.session === (state.session ?? null) && entry.text === text && (entry.error || entry.sending || entry.automatic));
-        if (!text || original?.sending || original && original.session !== state.session) return false;
+        if (!text && !(original?.attachments || attachments)?.length || original?.sending || original && original.session !== state.session) return false;
         if (!inSelectedChat()) {
             say(creating ? t('Creating a new chat…', '正在新建对话…') : t('Loading this chat. Please send again shortly.', '正在读取对话，请稍后再发一次'));
             return false;
         }
-        const entry = original || {id: newId(), text, session: state.session ?? null, draft, whiteboxPreview: whiteboxPreview && state.agent?.builtin !== true};
+        const entry = original || {id: newId(), text, attachments: attachments || [], session: state.session ?? null, draft, whiteboxPreview: whiteboxPreview && state.agent?.builtin !== true};
         if (draft) entry.draft = draft;
         if (!original) pending.push(entry);
         if (!automatic) entry.attempts = 0;
@@ -1243,9 +1323,10 @@ export function agentChat(t, api, {open, edit, shown = () => true, changed = () 
         if (stopMode) { void abandon(); return; }
         const text = input.value;
         const draft = saveDraft();
-        if (!text.trim() || !composeAllowed() || draftSending()) return;
+        const pictures = readyPictures();
+        if (!text.trim() && !pictures.length || !composeAllowed() || draftSending() || stagedList().some(item => !item.attachment)) return;
         const failed = pending.find(entry => entry.session === state.session && entry.draft === draft && entry.error);
-        void send(text, failed, draft);
+        void send(text, failed, draft, false, pictures);
     });
 
     // Both a server-side session change and a list selection reset the same reader. Job clocks stay keyed by job id.

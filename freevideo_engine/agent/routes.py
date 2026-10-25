@@ -22,7 +22,7 @@ import time
 import uuid
 
 from . import API_VERSION, enabled
-from . import assets
+from . import assets, attachments
 from . import private_file
 from . import spec as specs
 from .. import tiers as quality_tiers
@@ -433,6 +433,7 @@ def register():
     connection = dict(connected=False, client=None, via=None, last_seen_at=None)
     # The conversation in the Autopilot view: the page and the connected agent talk in the agent's latest session.
     chat = dict(client=None, waiting=0, folds={}, told={})
+    chat_writes = asyncio.Lock()
     server._freevideo_agent_connection = connection
 
     def problem(code, message=None, status=None, **details):
@@ -473,7 +474,12 @@ def register():
                         valid = definition.get('lan') and proxy_identity.check_csrf(request)
                     else:
                         valid = valid_page_session(request)
-                    if not valid:
+                elif definition.get('page_cookie'):
+                    session = page_sessions.get(request.cookies.get('freevideo_agent_page', ''))
+                    valid = session is not None and session[1] >= time.monotonic()
+                else:
+                    valid = True
+                if not valid:
                         raise JobError('page_session_required', 'Page session required')
                 header = request.headers.get('Authorization', '')
                 given = header[7:].strip() if header[:7].lower() == 'bearer ' else request.headers.get('X-FreeVideo-Agent', '')
@@ -522,7 +528,7 @@ def register():
                 return await handler(request)
             except specs.SpecError as error:
                 value = errors.validation(error.errors, getattr(error, 'code', 'invalid_request'))
-                return reply({'error': value}, errors.ERRORS[value['code']][0])
+                return reply({'error': value}, getattr(error, 'status', errors.ERRORS[value['code']][0]))
             except JobError as error:
                 value = error.view()
                 if value.get('next') and request.match_info.get('id'):
@@ -888,7 +894,8 @@ def register():
                 fold['seq'] = row['seq']
                 base = dict(seq=row['seq'], at=row['at'], type=row['type'])
                 if row['type'] == 'message':
-                    fold['items'].append(dict(base, role='user' if row['by'] == 'user' else 'agent', text=row['text']))
+                    fold['items'].append(dict(base, role='user' if row['by'] == 'user' else 'agent', text=row['text'],
+                                              **({'attachments': row['attachments']} if row.get('attachments') else {})))
                     if row['by'] == 'user':
                         fold['said'] = row['text']
                         if row.get('mid'):
@@ -1017,6 +1024,75 @@ def register():
                         active=sum(1 for r in rows if r['status'] in ACTIVE))
         return reply(await asyncio.to_thread(read))
 
+    def chat_not_connected():
+        return reply({'error': dict(code='not_connected', message='No agent is connected.', retryable=True,
+                                    error_zh='尚未连接 Agent', error_en='No agent is connected.',
+                                    details=[], next='Connect an agent in the Autopilot view, then say it again.',
+                                    request_id=errors.request_id())}, 409)
+
+    @routes.post('/freevideo/agent/chat/attach')
+    @guarded
+    async def chat_attach(request):
+        from . import media
+        if work_sessions() is None or chat['client'] is None:
+            return chat_not_connected()
+        limit = contract.MAX_CHAT_ATTACHMENT_BYTES
+        if request.content_length is not None and request.content_length > limit:
+            raise JobError('too_large', 'Upload exceeds limit', limit_bytes=limit)
+        with tempfile.TemporaryDirectory(prefix='.chat-attach-', dir=port.input_root) as temporary:
+            # The suffix selects the image decoder; Pillow recognizes the actual content format.
+            target = Path(temporary) / 'image.png'
+            size, digest = 0, hashlib.sha256()
+            with target.open('xb') as output:
+                while True:
+                    chunk = await request.content.read(min(256 * 1024, limit - size + 1))
+                    if not chunk:
+                        break
+                    size += len(chunk)
+                    if size > limit:
+                        raise JobError('too_large', 'Upload exceeds limit', limit_bytes=limit)
+                    output.write(chunk)
+                    digest.update(chunk)
+            async with upload_decoders:
+                try:
+                    info, suffix = await asyncio.to_thread(media.validate_upload, target)
+                    if suffix not in ('.png', '.jpg', '.webp'):
+                        raise ValueError('Only PNG, JPEG and WebP chat images are supported')
+                except (OSError, ValueError, SyntaxError):
+                    raise JobError('invalid_media', 'Image cannot be decoded within the upload limits') from None
+            name = digest.hexdigest() + suffix
+            original = await asyncio.to_thread(attachments.publish, port.input_root, target, name, request[query_key]['name'])
+            return reply(dict(name=name, original_name=original, width=info['width'], height=info['height'], bytes=size), 201)
+
+    @routes.get('/freevideo/agent/chat/attachment')
+    @guarded
+    async def chat_attachment(request):
+        name = request[query_key]['name']
+        try:
+            path = attachments.path(port.input_root, name)
+            async with upload_decoders:
+                await asyncio.to_thread(attachments.read, port.input_root, name)
+        except (OSError, ValueError, SyntaxError):
+            raise JobError('not_found', 'No saved chat image') from None
+        kind = {'.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp'}[path.suffix]
+        return web.FileResponse(path, headers={'Content-Type': kind, 'Cache-Control': 'private, no-store',
+                                               'X-Content-Type-Options': 'nosniff'})
+
+    def chat_attachments(values):
+        result, seen = [], set()
+        for i, item in enumerate(values):
+            field = '/attachments/%d/name' % i
+            if item['name'] in seen:
+                raise specs.SpecError(contract.diagnostic(field, 'a distinct attachment name', item['name']))
+            seen.add(item['name'])
+            try:
+                result.append(attachments.read(port.input_root, item['name']))
+            except (OSError, ValueError, SyntaxError):
+                error = specs.SpecError(contract.diagnostic(field, 'an existing uploaded image', item['name']))
+                error.status = 400
+                raise error from None
+        return result
+
     @routes.post('/freevideo/agent/chat')
     @guarded
     async def chat_say(request):
@@ -1026,17 +1102,22 @@ def register():
             if store is None or client is None:
                 return None
             before = store.current_for(client)
-            sid = chat_session(store, value.get('session')) or store.create(client=client, by='user')['id']
-            fold = chat_fold(store, sid)
-            if value['id'] in fold['sent']:
+            sid = chat_session(store, value.get('session'))
+            fold = chat_fold(store, sid) if sid else None
+            if fold is not None and value['id'] in fold['sent']:
                 seq = fold['sent'][value['id']]
                 first = next(i for i in fold['items'] if i['seq'] == seq)
                 return 200, dict(seq=seq, id=value['id'], at=first['at'], session=sid,
                                  read=seq <= store.read_until(sid, client), agent=agent_state())
+            pictures = chat_attachments(value.get('attachments', []))
+            sid = sid or store.create(client=client, by='user')['id']
+            fold = fold or chat_fold(store, sid)
             if store.stopped(sid):
                 # Speaking again continues a conversation the user stopped earlier.
                 store.append(sid, dict(type='control', action='resumed'), by='user')
             message = dict(type='message', text=value['text'], mid=value['id'])
+            if pictures:
+                message['attachments'] = pictures
             if value.get('whitebox'):
                 message['whitebox'] = True
             row = store.append(sid, message, by='user')
@@ -1046,13 +1127,11 @@ def register():
                 fold['ids'].pop(fold['sent'].pop(next(iter(fold['sent']))), None)
             chat_moved(store, before)
             return 201, dict(seq=row['seq'], id=value['id'], at=row['at'], session=sid, read=False, agent=agent_state())
-        done = await asyncio.to_thread(write)
+        async with chat_writes, upload_decoders:
+            done = await asyncio.to_thread(write)
         if done is None:
             # Nothing is kept: no agent has connected since FreeVideo started, so nobody would read it.
-            return reply({'error': dict(code='not_connected', message='No agent is connected.', retryable=True,
-                                        error_zh='尚未连接 Agent', error_en='No agent is connected.',
-                                        details=[], next='Connect an agent in the Autopilot view, then say it again.',
-                                        request_id=errors.request_id())}, 409)
+            return chat_not_connected()
         return reply(done[1], done[0])
 
     @routes.post('/freevideo/agent/chat/abandon')
@@ -1520,6 +1599,8 @@ def register():
             value['text'] = chat_text(value['text'])
         client = session_client(request, by)
         def write():
+            if value.get('attachments'):
+                value['attachments'] = chat_attachments(value['attachments'])
             row = sessions.append(sid, value, by=by, client=client)
             here = sessions.current_for(client) if client and value['type'] == 'message' else None
             if here not in (None, sid):

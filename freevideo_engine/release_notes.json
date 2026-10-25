@@ -1,21 +1,42 @@
 {
   "schema": 1,
-  "product_version": "0.4.21",
+  "product_version": "0.4.22",
   "en": {
-    "summary": "Agent image tasks can place characters in a scene by position, size and facing; the page check no longer reports a covered toolbar behind ComfyUI dialogs.",
+    "summary": "Autopilot chat can attach reference pictures; the launcher and the editor explain more precisely why a step failed; Mac setup no longer needs Git installed.",
     "changes": [
-      "Agent images: an image task can take a scene picture and one to three characters (character card or picture) with a position, a height, a full-body or half-body framing and a facing direction. The picture is generated with the scene as the first reference instead of a pasted collage, and the result can be used directly as a first frame.",
-      "Page check: the FreeVideo toolbar is no longer reported as covered when ComfyUI shows a dimming or click-away layer over it, such as the Templates dialog on a first start or the Help panel; the details now name what covers the toolbar."
+      "Autopilot: a chat message can carry reference pictures, added with the Picture button, by pasting or by dragging, up to 4 per message and 10 MB each. A picture that fails to upload stays in place and can be clicked to retry.",
+      "Launcher and setup: choosing a folder inside a portable ComfyUI, such as its python_embeded folder, now names the portable folder to select. Mac setup downloads its own Git when the system has none. A failed Git download no longer leaves an incomplete folder behind, and leftovers from earlier attempts are removed. On Windows, when security software briefly holds the newly downloaded installer tool, setup retries for a few seconds instead of stopping with \"This folder is not writable\".",
+      "Edit: a failed save now states its cause, and a lost connection is reported as a lost connection. Edit also works on an https page served through a proxy that terminates the secure connection, as on some cloud GPU hosts.",
+      "Diagnostic reports: the page check states why an open creative panel cannot be seen. When a request is refused for lack of memory on Windows, the report records how much of the used memory FreeVideo itself holds."
     ]
   },
   "zh": {
-    "summary": "Agent 图片任务可按位置、大小和朝向把人物放进场景；页面检查不再因 ComfyUI 的对话框遮罩报告工具栏被遮挡。",
+    "summary": "AI 全自动聊天可以附参考图；启动器和编辑器更准确地说明失败原因；Mac 安装不再需要预先装好 Git。",
     "changes": [
-      "Agent 图片：图片任务可以指定一张场景图和一至三个人物（角色卡或图片），并设定位置、人物高度、全身或半身景别和朝向。图片以场景为第一参考图生成，不再拼贴粘图，结果可直接作首帧。",
-      "页面检查：ComfyUI 的调暗或点击遮罩（首次启动的模板对话框、帮助面板等）盖在 FreeVideo 工具栏上时，不再报告工具栏被遮挡；诊断详情会写出遮挡工具栏的元素。"
+      "AI 全自动：聊天消息可以附参考图，用“图片”按钮、粘贴或拖入添加，每条最多 4 张、每张不超过 10 MB。上传失败的图片会保留，点击即可重试。",
+      "启动器和安装：选中便携版 ComfyUI 内部的文件夹（例如 python_embeded）时，提示会写出应选择的便携版文件夹。Mac 系统没有 Git 时，安装会自行下载 Git。Git 下载失败后不再留下不完整的文件夹，以前残留的也会清除。Windows 上安全软件短暂占用刚下载的安装工具时，安装会重试数秒，不再以“此文件夹不可写”停止。",
+      "编辑：保存失败时会写明原因，连接断开时显示为连接已断开。通过代理终止安全连接的 https 页面（部分云端显卡主机即是如此）上也可以正常使用编辑。",
+      "诊断报告：页面检查会写明创作面板已打开却看不到的原因。Windows 上请求因内存不足被拒绝时，报告会写出已用内存中 FreeVideo 自己占用多少。"
     ]
   },
   "history": [
+    {
+      "product_version": "0.4.21",
+      "en": {
+        "summary": "Agent image tasks can place characters in a scene by position, size and facing; the page check no longer reports a covered toolbar behind ComfyUI dialogs.",
+        "changes": [
+          "Agent images: an image task can take a scene picture and one to three characters (character card or picture) with a position, a height, a full-body or half-body framing and a facing direction. The picture is generated with the scene as the first reference instead of a pasted collage, and the result can be used directly as a first frame.",
+          "Page check: the FreeVideo toolbar is no longer reported as covered when ComfyUI shows a dimming or click-away layer over it, such as the Templates dialog on a first start or the Help panel; the details now name what covers the toolbar."
+        ]
+      },
+      "zh": {
+        "summary": "Agent 图片任务可按位置、大小和朝向把人物放进场景；页面检查不再因 ComfyUI 的对话框遮罩报告工具栏被遮挡。",
+        "changes": [
+          "Agent 图片：图片任务可以指定一张场景图和一至三个人物（角色卡或图片），并设定位置、人物高度、全身或半身景别和朝向。图片以场景为第一参考图生成，不再拼贴粘图，结果可直接作首帧。",
+          "页面检查：ComfyUI 的调暗或点击遮罩（首次启动的模板对话框、帮助面板等）盖在 FreeVideo 工具栏上时，不再报告工具栏被遮挡；诊断详情会写出遮挡工具栏的元素。"
+        ]
+      }
+    },
     {
       "product_version": "0.4.20",
       "en": {
@@ -236,35 +257,6 @@
           "中文界面：浏览器翻译不再改动 FreeVideo 自己的文字，尺寸菜单保持显示 MP。",
           "反馈：为失败的生成发送反馈时，会附上引擎给出的报错信息。",
           "安装：Windows 上的库文件检查也支持层级很深的文件夹。"
-        ]
-      }
-    },
-    {
-      "product_version": "0.4.13",
-      "en": {
-        "summary": "High is faster than Max again, videos at another size of the same shape can be continued, LoRAs on int8 models apply what they can, Settings adds step-by-step how-tos and an offline tutorial, and the installers are smaller.",
-        "changes": [
-          "High: the step cache is back with added checks, so High runs faster than Max again.",
-          "Long videos: parts of a long video and continued parts use 8 + 3 steps, so a second part is no longer refused.",
-          "Continue: a video at another size of the same shape now continues from its own ending. Videos that are too short or have too low a frame rate show a clear message.",
-          "LoRA: on int8 models, the parts of a LoRA that cannot be applied are skipped and the rest takes effect, instead of the whole LoRA being refused.",
-          "Help: \"User guide\" in Settings shows three how-tos on the real interface, and the new \"Tutorial\" opens an offline illustrated manual in English and Chinese.",
-          "Upgrade: a FreeVideo tab left open from an older version switches to the current workflow and keeps the prompt, size, length, seed, assets and LoRAs.",
-          "Agent: assembled videos are saved to \"Your creations\", and their task cards can be opened.",
-          "Install: the Windows and Linux installers are smaller, the prompt enhancement model can also download from ModelScope, and the GPU acceleration step shows one steady name and description while it builds."
-        ]
-      },
-      "zh": {
-        "summary": "精细档重新比极致档快；同比例、不同尺寸的视频可以接着生成；int8 模型上的 LoRA 能用的部分照常生效；设置中新增分步演示和离线教程；安装包变小。",
-        "changes": [
-          "精细档：重新启用步缓存，并加上检查，精细档重新比极致档快。",
-          "长视频：长视频的分段和接着生成的分段统一使用 8 + 3 步，第二段不再被拒绝。",
-          "接着生成：同比例、不同尺寸的视频改为从它自己的结尾接着生成；太短或帧率太低的视频会给出明确提示。",
-          "LoRA：在 int8 模型上，LoRA 中无法应用的部分会跳过，其余照常生效，不再整个拒绝。",
-          "帮助：设置中的“使用说明”改为在真实界面上演示三项操作；新增“教程”，可打开中英文离线图文手册。",
-          "升级：旧版本留在标签页中的 FreeVideo 工作流会换成当前版本，并保留提示词、尺寸、时长、种子、素材和 LoRA。",
-          "Agent：拼接的成片保存到“我的作品”，任务卡可以打开。",
-          "安装：Windows 和 Linux 安装包变小；提示词增强模型也可以从魔搭下载；GPU 加速组件构建时，名称和说明保持不变。"
         ]
       }
     }

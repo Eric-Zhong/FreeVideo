@@ -221,6 +221,10 @@ def environment_python_removed(args, pythons):
 
 # Checked before free space: freeing space cannot fix a disk that cannot hold the installation.
 PLACE_RULES = (
+    (r'Git is unavailable\. Check the network connection', 'git-unavailable',
+     ('Git could not be set up', '无法准备 Git'),
+     ('Check the network connection and click Check again, or install the Apple Command Line Tools.',
+      '请检查网络连接后点击“重新检查”，或者安装 Apple 命令行工具。')),
     (r'The installation folder is on a FAT32 disk', 'disk-format',
      ('This disk cannot hold the models', '这块硬盘放不下模型'),
      ('It is formatted as FAT32, which stores files up to 4 GB; the prompt model alone is 15.7 GB. '

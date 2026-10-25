@@ -45,6 +45,18 @@ export async function agentSend(api, method, path, body, headers = {}) {
 
 // UI actions retry once, including HTTP refusals. Callers keep the same
 // idempotency id/body and show the result where the user clicked.
+// Raw bytes (one picture) with the same page session and one retry after a restart.
+export async function agentUpload(api, path, body, signal) {
+    for (let attempt = 0; ; attempt++) {
+        const response = await api.fetchApi(path, {method: 'POST', credentials: 'same-origin', signal, body,
+            headers: {'Content-Type': 'application/octet-stream', ...await agentHeaders(api)}});
+        if (response.status !== 403 || attempt) return response;
+        const value = await response.clone().json().catch(() => null);
+        if (value?.error?.code !== 'page_session_required') return response;
+        sessions.delete(api);
+    }
+}
+
 export async function retryAgentPost(api, path, body, {retry = async () => body, accept = () => true} = {}) {
     for (let attempt = 0; attempt < 2; attempt++) {
         let response = null;

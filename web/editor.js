@@ -91,8 +91,14 @@ function exportErrorText(value, t) {
 }
 // The save route's own messages are internal English, so only a full disk is named.
 function saveErrorText(value, t) {
+    if (isNetworkTypeError(value)) return connectionLostText(t);
     return value?.reason === 'disk_full' ? t('Saving changes failed: the disk is full. Free some space, then export again.', '保存改动时出错：磁盘空间不够，空出空间后再导出。')
         : t('Saving changes failed. Please export again.', '保存改动时出错，请再导出一次。');
+}
+// Names the failed save for the report: the server's reason, else the HTTP status, a lost connection, or no failure recorded yet.
+function saveReason(failure) {
+    if (!failure) return 'unsaved';
+    return failure.reason || (failure.status ? 'http_' + failure.status : isNetworkTypeError(failure) ? 'network' : undefined);
 }
 function restoreGeneration(record, before, prepared) {
     const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
@@ -491,7 +497,7 @@ export function openEditor({api, app, from = null, panel = {}, components: given
             await queue.flush();
         }
         if (disposed || closing || epoch !== projectEpoch) return false;
-        if (queue.dirty) { notify(saveErrorText(queue.failure, t), EDITOR_ISSUE, failureKind('save', {reason: queue.failure?.reason})); return false; }
+        if (queue.dirty) { notify(saveErrorText(queue.failure, t), EDITOR_ISSUE, failureKind('save', {reason: saveReason(queue.failure)})); return false; }
         return !!state.record.id;
     }
     function updateTop() {
@@ -708,7 +714,7 @@ export function openEditor({api, app, from = null, panel = {}, components: given
             const words = deleteEditText(t);
             if (jobActive()) throw {reason: 'generation_active'};
             await queue.flush(); releaseStamp();
-            if (queue.dirty) { notify(saveErrorText(queue.failure, t), EDITOR_ISSUE, failureKind('save', {reason: queue.failure?.reason})); return; }
+            if (queue.dirty) { notify(saveErrorText(queue.failure, t), EDITOR_ISSUE, failureKind('save', {reason: saveReason(queue.failure)})); return; }
             // Load the replacement before deleting, so a read failure keeps the edit open.
             const rows = (await store.projects()).filter(row => row.id !== state.record.id);
             // Most recently used: the order the edits were opened, then the last save.

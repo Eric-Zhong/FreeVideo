@@ -13,7 +13,7 @@ const t = (en, zh) => cn ? zh : en;
 // launcher.js removes this flag during setup; read it before that.
 const launchVisit = query.get('freevideo') === 'launch';
 // Every script this folder ships; a test keeps the list in step with web/*.js.
-export const MODULES = ['chat_data.js', 'phone_model.js', 'phone.js', 'lan_access.js', 'qrcodegen.js', 'agent_activity.js', 'agent_connect.js', 'agent_session.js', 'autopilot.js', 'autopilot_chat.js', 'autopilot_conversations.js', 'browser_extension.js', 'caret_rect.js', 'chain_support.js', 'capability_view.js', 'cast_generate.js', 'cast_mention.js', 'cast_overlay.js', 'cast_source.js', 'compatibility.js', 'entry_showcase.js', 'error_panel.js', 'first_run_guide.js', 'fonts.js', 'freevideo.js', 'generation_progress.js',
+export const MODULES = ['chat_data.js', 'phone_model.js', 'phone.js', 'lan_access.js', 'qrcodegen.js', 'agent_activity.js', 'agent_connect.js', 'agent_session.js', 'autopilot.js', 'autopilot_chat.js', 'chat_attachments.js', 'autopilot_conversations.js', 'browser_extension.js', 'caret_rect.js', 'chain_support.js', 'capability_view.js', 'cast_generate.js', 'cast_mention.js', 'cast_overlay.js', 'cast_source.js', 'compatibility.js', 'entry_showcase.js', 'error_panel.js', 'first_run_guide.js', 'fonts.js', 'freevideo.js', 'generation_progress.js',
     'editor.js', 'editor_actions.js', 'editor_lifecycle.js', 'editor_adjust.js', 'editor_adjust_picture.js', 'editor_picture_fields.js', 'editor_picture_session.js', 'editor_preview_picture.js', 'editor_entry.js', 'editor_expand.js', 'editor_export_dialog.js', 'editor_first_frame.js', 'editor_media_references.js', 'editor_references.js', 'editor_genbar.js', 'editor_geometry.js', 'editor_library.js', 'editor_menu.js', 'editor_model.js', 'editor_frame.js', 'editor_player.js', 'editor_room.js', 'editor_select.js', 'editor_state.js', 'editor_store.js', 'editor_tracks.js', 'editor_generation.js', 'editor_transport.js', 'editor_transport_model.js', 'editor_audio.js', 'editor_audio_model.js', 'editor_audio_notes.js', 'editor_audio_replace.js', 'editor_audio_rules.js', 'editor_speed.js', 'editor_speed_model.js', 'editor_failure.js', 'editor_header_fit.js',
     'editor_loader.js', 'editor_text_coverage.js', 'editor_text.js', 'editor_toolbar_more.js', 'editor_text_model.js', 'editor_text_layout.js', 'editor_notes.js', 'editor_icons.js', 'dialog_keys.js', 'done_notify.js', 'failure_issue.js', 'feedback.js', 'frame_sizes.js', 'health.js', 'image_commands.js', 'image_editor.js', 'image_editor_engine.js', 'image_generation.js', 'launch_visit.js', 'launcher.js', 'length_plan.js', 'lora_triggers.js', 'lora_check.js', 'library.js', 'motion.js', 'native_errors.js', 'translate_guard.js', 'output_download.js', 'port_notice.js', 'preview_scene.js',
     'progress_connection.js', 'prompt_draft.js', 'prompt_enhance.js', 'prompt_references.js', 'prompt_terms.js', 'request_assets.js', 'repair_hint.js', 'report_issue.js', 'issue_button.js', 'studio_recent.js',
@@ -344,6 +344,15 @@ function onScreen(element) {
 // canvas: inside the window, sized, and invisible. Look at what is on top of
 // its view switch; a dialog, menu, toast or this card only passes over it.
 const OVERLAYS = 'dialog, [role="dialog"], [role="menu"], .p-dialog-mask, .p-overlay-mask, .p-toast, .litecontextmenu, .fv-health';
+// Why a dialog that is open does not count as on screen, for the details of the report: which test it fails
+// and the box and window it was measured against (no page content).
+function whyOffScreen(element) {
+    const style = getComputedStyle(element), box = element.getBoundingClientRect();
+    const reason = !element.isConnected ? 'not in the page' : element.hidden ? 'hidden attribute'
+        : style.display === 'none' ? 'display: none' : style.visibility === 'hidden' ? 'visibility: hidden'
+        : Number(style.opacity) === 0 ? 'opacity: 0' : !(box.width > 0 && box.height > 0) ? 'no size' : 'outside the window';
+    return `${reason}; box ${Math.round(box.left)},${Math.round(box.top)} ${Math.round(box.width)}x${Math.round(box.height)}; window ${innerWidth}x${innerHeight}`;
+}
 // A layer hides the toolbar only if it paints over it. ComfyUI's dimming
 // backdrops and click-away layers (a dialog's shade, the help panel's) leave it
 // visible underneath, so they are not a fault.
@@ -397,7 +406,8 @@ function workspaceProblem(app) {
     // The editor shares the studio shell; either view replaces the floating toolbar.
     const studio = document.querySelector('dialog.fv-editor[open]') || document.querySelector('dialog.fv-studio[open]');
     if (studio) return onScreen(studio) ? null
-        : {text: t('The creative workspace is open but cannot be seen on the page.', '创作面板已经打开，但页面上看不到。'), advice: 'reload'};
+        : {text: t('The creative workspace is open but cannot be seen on the page.', '创作面板已经打开，但页面上看不到。'), advice: 'reload',
+            state: `${nameOf(studio)}: ${whyOffScreen(studio)}`};
     const bar = document.querySelector('.fv-view-navigation');
     if (!bar) return {text: t('The FreeVideo toolbar that opens the creative workspace is missing from the page.', '页面上没有打开创作面板的 FreeVideo 工具栏。'), advice: 'reload'};
     const cover = onScreen(bar) ? coveredBy(bar) : null;
@@ -477,7 +487,7 @@ function details(problems) {
         `ComfyUI frontend: ${window.__COMFYUI_FRONTEND_VERSION__ || 'unknown'}`,
         `FreeVideo UI: ${JSON.stringify(window.FreeVideoUI || {})}`,
         `Automatic reload: ${retried ? new Date(Number(retryRecord.at)).toISOString() : retryRecord ? 'not needed' : 'unavailable (no session storage)'}`,
-        '', 'Problems:', ...problems.flatMap(p => [`- ${p.text}`, ...(p.cover ? [`  covered by: ${p.cover}`] : [])]),
+        '', 'Problems:', ...problems.flatMap(p => [`- ${p.text}`, ...(p.cover ? [`  covered by: ${p.cover}`] : []), ...(p.state ? [`  state: ${p.state}`] : [])]),
         ...(checks.length ? ['', 'Load check:', ...checks.map(row => `- ${row}`)] : []),
         ...(cache.length ? ['', 'Browser cache:', ...cache.map(row => `- ${row}`)] : []),
         ...(before.length ? ['', 'Browser cache before the automatic reload:', ...before.map(row => `- ${row}`)] : []),

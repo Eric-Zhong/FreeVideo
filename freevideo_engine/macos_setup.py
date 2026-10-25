@@ -20,6 +20,19 @@ class Installer(SharedInstaller):
     def prepare_tools(self):
         return native.prepare_uv(self.root, self.network, self.env, self.fetch)
 
+    def install_git(self):
+        """The system Git when it runs; otherwise Git from conda-forge in FreeVideo's own folder."""
+        git = native.available_git()
+        if git:
+            return
+        try:
+            self.install_git_conda('git_macos.json', 'git-macos',
+                                   lambda spec: self.fetch_conda_lock(spec, 'git-macos', 'Git'), wrapper=True)
+        except Exception as error:
+            if self.cancel.is_set():
+                raise
+            raise RuntimeError(native.GIT_UNAVAILABLE) from error
+
     def component_tasks(self, uv):
         tasks = {}
         def task(name, run, after=(), writes=()):
@@ -27,6 +40,7 @@ class Installer(SharedInstaller):
         python = self.pythons['engine']
         writer = ('environment:unified',)
         task('python', lambda: self.python_install(uv))
+        task('git', self.install_git)
         task('unified-venv', lambda: None if python.is_file() else
              self.command('unified-venv', [uv, 'venv', '--python', native.PYTHON_VERSION, self.root / 'envs/unified']),
              ('python',), writer)
@@ -36,12 +50,12 @@ class Installer(SharedInstaller):
         task('engine', lambda: self.packages('unified-engine', [uv, 'pip', 'install', '--python', python,
             '--no-deps', '-e', SOURCE]), ('runtime',), writer)
         task('vdn-source', lambda: self.command('vdn-source', [python, '-c',
-            'from freevideo_engine.install import install; install()']), ('unified-venv',))
+            'from freevideo_engine.install import install; install()']), ('unified-venv', 'git'))
         task('vdn-install', lambda: self.packages('vdn', [uv, 'pip', 'install', '--python', python,
             '--no-deps', '-e', self.root / 'vendor/vdn' / self.spec['vdn']['diffusers_subdirectory']]),
             ('engine', 'vdn-source'), writer)
         task('encoder-source', lambda: self.clone('h3-text-encoder',
-            self.spec['encoder']['comfy_url'], self.spec['encoder']['comfy_commit']))
+            self.spec['encoder']['comfy_url'], self.spec['encoder']['comfy_commit']), ('git',))
         task('models', lambda: self.command('models', [python, '-m', 'freevideo_engine.provision',
             '--plan', self.run_dir / 'plan.json']), ('engine',))
         return tasks, {'unified': python}, self.root / 'vendor/h3-text-encoder'

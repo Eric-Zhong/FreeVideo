@@ -758,8 +758,8 @@ export function createGenerationProgress(t, now = () => Date.now(), {compact = f
                     : splitFailed && !progressText ? 'split' : '';
         const explanation = {retry: recovery,
             pause: progressText,
-            memory: t('This video will take longer than usual, but it will finish.',
-                '这次生成会比平时慢，但能完成。'),
+            memory: t('This size and length do not fit in GPU memory, so part of the data is kept in system memory. It will take longer than usual, but it will finish.',
+                '显存放不下这次的尺寸和时长，部分数据改放在内存里，因此会比平时慢，但能完成。'),
             // Mac, level 3 with low-memory mode (never both). The measured numbers go to the
             // report only. Closing applications during the first pass can still give the
             // second pass room, so that advice shows only until then.

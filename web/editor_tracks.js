@@ -625,8 +625,24 @@ export function createTracks(host, {state, sources = {}, t = en => en, actions =
         const room = next.length ? Math.min(...next) : bounds.height;
         popover.style.top = `${Math.max(8, below + height <= room || above < 8 ? Math.min(below, bounds.height - height - 8) : above)}px`;
     }
+    // A click inside a range drawn over empty space that makes several parts plans those parts and chooses the one
+    // clicked, so each can be described on its own. What was typed for the range is the first part's description.
+    function choosePart(event) {
+        const range = state.selection;
+        if (event.kind !== 'rangeMove' || range?.kind !== 'range' || rangeParts(range).length < 2
+            || state.record.tracks.some(track => track.clips.some(clip => clip.start < range.start + range.frames && clip.start + clip.frames > range.start))) return;
+        const frame = frameAt(event), text = state.rangeText?.trim() || '';
+        let next, clicked;
+        try {
+            next = model.planRange(state.record, {start: range.start, frames: range.frames, ...(range.parts ? {parts: range.parts} : {}), target: 'both', ...actions.generationLimits?.()});
+            const drawn = next.tracks[0].clips.filter(clip => !model.find(state.record, clip.id)).sort((a, b) => a.start - b.start);
+            clicked = drawn.find(clip => frame >= clip.start && frame < clip.start + clip.frames) ?? (frame < range.start ? drawn[0] : drawn.at(-1));
+            if (text) next = model.describe(next, [drawn[0].id], text);
+        } catch (error) { if (error instanceof model.EditError) return; throw error; }
+        attempt(t('Edit description', '修改说明'), () => next, {selectionAfter: {kind: 'clip', ids: model.pair(next, clicked.id).map(clip => clip.id)}});
+    }
     function clickSelection(event) {
-        if (event.range) return;
+        if (event.range) { choosePart(event); return; }
         const id = event.clipId || event.target.closest?.('.fv-ed-clip')?.dataset.clip;
         if (id) {
             selectGestures.choose(id, event);
@@ -928,7 +944,7 @@ export function createTracks(host, {state, sources = {}, t = en => en, actions =
         if (cancel) { state.select(finished.previousSelection); if (finished.type === 'seek') state.seek(finished.previousPlayhead); return; }
         if (finished.type === 'seek') return;
         if (!finished.moved || finished.type === 'click') {
-            clickSelection({target: finished.target, clientX: event.clientX, range: finished.range, clipId: finished.id}); return;
+            clickSelection({target: finished.target, clientX: event.clientX, range: finished.range, kind: finished.type, clipId: finished.id}); return;
         }
         if (finished.type === 'rangeMove' && finished.rangeBlocked) return;
         if (['range', 'rangeMove', 'rangeEdge', 'rangeBoundary'].includes(finished.type)) { state.select(finished.selection, {history: true}); return; }
@@ -1186,7 +1202,7 @@ export function createTracks(host, {state, sources = {}, t = en => en, actions =
     const unsubscribe = state.subscribe(event => {
         if (event.type === 'record') {
             // Status updates elsewhere must not cancel an unchanged moving pair.
-            if (gesture && !(gesture.type === 'move' && gesture.members.every(clip =>
+            if (gesture && !(gesture.type === 'move' && (gesture.members ?? []).every(clip =>
                 JSON.stringify(model.find(state.record, clip.id)) === JSON.stringify(clip)))) stopPointer(null, true);
             if (gesture) cachedPoints = allPoints(gesture.ids);
             renderRecord();

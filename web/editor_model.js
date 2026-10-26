@@ -362,6 +362,18 @@ function written(clip, text, by) {
     if (by === 'user' && text !== clip.text) delete clip.note;
     clip.text = text; if (text && by === 'agent') clip.text_by = by; else delete clip.text_by;
 }
+// A planned part's own description. The parts after it that still had the same one take the new one too;
+// a part with none of its own is left so, and goes on using the one before it when generated.
+export function describePlanned(record, ids, text, {by = 'user'} = {}) {
+    const selected = linkedIds(record, ids), video = trackBy(record, 'v1').clips;
+    const chosen = video.filter(clip => selected.has(clip.id)).sort((a, b) => a.start - b.start);
+    const following = [], old = chosen.at(-1)?.text ?? '';
+    for (let last = chosen.at(-1), next; old && (next = video.find(clip => continuing(clip, last))); last = next) {
+        if (selected.has(next.id) || next.source || next.pending !== 'draft' || next.job || (next.text && next.text !== old)) break;
+        if (next.text) following.push(next.id);
+    }
+    return describe(record, [...ids, ...following], text, {by});
+}
 function onBlocks(record, ids, change, refuseBusy, {picture = false, kept = false} = {}) {
     check(Array.isArray(ids) && ids.length > 0 && ids.every(id => typeof id === 'string'), 'id');
     for (const id of ids) check(find(record, id), 'missing');
@@ -923,8 +935,9 @@ export function extendClip(record, id, frames, {maxSeconds = RULES.maxSeconds, m
     const next = copy(restored), sound = sourceAudioTrack(next, start, count);
     const parts = rangeParts(restored, {start, frames: count, continues: true, maxSeconds, maxFollowSeconds});
     const planned = planRange({...emptyProject(restored), serial: next.serial},
-        {start, frames: count, parts, target: 'both', text: clip.text, maxSeconds: maxFollowSeconds, maxFollowSeconds});
-    // Pulled out of this part's end: the new parts continue it.
+        {start, frames: count, parts, target: 'both', maxSeconds: maxFollowSeconds, maxFollowSeconds});
+    // Pulled out of this part's end: the new parts continue it. They have no description of their own until one
+    // is written, and are generated with the one of the part before them.
     trackBy(next, 'v1').clips.push(...planned.tracks[0].clips.map(added => added.start === start ? {...added, follows: clip.id} : added));
     sound.clips.push(...planned.tracks[1].clips);
     next.serial = planned.serial;
@@ -1033,9 +1046,11 @@ function update(record, ids, change) {
     for (const clip of all(next)) if (selected.has(clip.id)) change(clip);
     return finish(next);
 }
+// text is one description for every part, or one per part keyed by the part's picture.
 export function startAttempt(record, ids, text, {by = 'user'} = {}) {
-    check(validText(text) && TEXT_BY.includes(by), 'text');
+    const textOf = clip => typeof text === 'string' ? text : text?.[clip.id] ?? text?.[clip.link];
     const next = copy(record), selected = linkedIds(next, ids), parts = new Map();
+    check(TEXT_BY.includes(by) && all(next).every(clip => !selected.has(clip.id) || validText(textOf(clip))), 'text');
     busy(all(next).filter(clip => selected.has(clip.id)));
     // Parts that continue one another stay one video; ranges drawn apart stay apart, however many are started together.
     let part = null, last = null;
@@ -1044,7 +1059,7 @@ export function startAttempt(record, ids, text, {by = 'user'} = {}) {
         parts.set(clip.id, part); if (clip.link) parts.set(clip.link, part); last = clip;
     }
     const other = () => part ??= freshId(next);
-    for (const clip of all(next)) if (selected.has(clip.id)) { written(clip, text, by); clip.part = parts.get(clip.id) ?? other(); clip.pending = 'draft'; clip.reason = clip.job = null; }
+    for (const clip of all(next)) if (selected.has(clip.id)) { written(clip, textOf(clip), by); clip.part = parts.get(clip.id) ?? other(); clip.pending = 'draft'; clip.reason = clip.job = null; }
     return finish(next);
 }
 export function assignJob(record, ids, job, {prepared = record} = {}) {

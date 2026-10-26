@@ -774,7 +774,7 @@ export function openStudio(node, {extendFrom = null} = {}) {
         // The rewrite has its own report; the video's report entry is not touched.
         onReport: row => { node.freevideoPromptReportId = row.rewrite_report_id || row.report_id; },
         onChange: () => { rememberPromptDraft(api, node); requestAssets?.refresh(); },
-        setText: text => { set(node, 'text', text || (untouched() ? starter : '')); placeholder(); }, context: () => {
+        setText: text => { set(node, 'text', text || (untouched() ? starter : '')); placeholder(); castOverlay.refresh(); announceCast(); }, context: () => {
         const media = enhancementMedia(referenceItems(node), linked(node, 'conditioning'));
         return {seconds: Number(value(node, 'seconds')), media};
     }});

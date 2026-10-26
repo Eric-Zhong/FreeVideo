@@ -202,7 +202,29 @@ export function createEditorGenbar(host, {state, t, actions, text = ''}) {
         width = next; resizeDescription();
     }) : null;
     resize?.observe(description);
-    input.oninput = () => { state.setRangeText(input.value); render(); };
+    // The box shows the description of the planned parts chosen and is written to them when the choice moves
+    // on, the box is left or Generate is pressed. What is typed with no part or range chosen goes to the next
+    // part chosen that has no description yet.
+    // written: what is to be written, which the enlarged box has before the small one.
+    let bound = null, dirty = false, loose = false, committing = false, written = '';
+    const typed = (value = input.value) => {
+        state.setRangeText(value); written = value;
+        if (bound) dirty = true; else loose = state.selection?.kind !== 'range';
+    };
+    function commit() {
+        if (!bound || !dirty) return;
+        const {ids} = bound; dirty = false; committing = true;
+        try { actions.describeParts?.(ids, written); } finally { committing = false; }
+    }
+    function bind() {
+        const part = actions.partText?.(state.selection) ?? null;
+        if (part && !part.text && loose && input.value.trim()) { bound = part; dirty = true; written = input.value; }
+        else if (part) { bound = part; dirty = false; input.value = part.text; }
+        else bound = null;
+        if (part || state.selection?.kind === 'range') loose = false;
+    }
+    input.oninput = () => { typed(); render(); };
+    input.onblur = () => { if (dirty) { commit(); bind(); } };
     input.onkeydown = event => {
         // The former text input did not submit or insert a line on Enter.
         if (event.key === 'Enter' && !event.shiftKey && !event.isComposing && event.keyCode !== 229) event.preventDefault();
@@ -211,14 +233,15 @@ export function createEditorGenbar(host, {state, t, actions, text = ''}) {
         const key = JSON.stringify(state.selection ?? null);
         if (pressing.has(key)) return;
         pressing.add(key); say(''); render();
-        const typed = input.value;
+        commit();
+        const shown = input.value;
         let reason = '';
         try {
             // The press shows before any planning, however long that takes.
             await painted();
             const result = actions.press ? await actions.press(input.value) : await actions.generate({target: 'both', text: input.value});
             // Never over what the user typed meanwhile, for another part.
-            if (result?.text != null && result.text !== input.value && input.value === typed) input.value = result.text;
+            if (result?.text != null && result.text !== input.value && input.value === shown) input.value = result.text;
             if (result?.say) { say(result.say, !!result.queued); reason = result.say; }
             if (result?.focus) { pressing.delete(key); render(); input.disabled = false; input.focus(); }
         }
@@ -229,7 +252,7 @@ export function createEditorGenbar(host, {state, t, actions, text = ''}) {
         finally { pressing.delete(key); render(); }
         return reason;
     };
-    const expand = createExpandButton({t, textarea: input, onGenerate: () => generate.onclick(), canGenerate: () => !generate.disabled, onDraft: text => state.setRangeText(text)});
+    const expand = createExpandButton({t, textarea: input, onGenerate: () => generate.onclick(), canGenerate: () => !generate.disabled, onDraft: text => typed(text)});
     description.append(expand.element);
     cancel.onclick = () => (!previewSelection && actions.selectionHeld?.() ? Promise.resolve(actions.unhold()).then(render) : actions.cancel()).catch(actions.error);
     resume.onclick = () => actions.resume().catch(value => actions.error(value, 'generate'));
@@ -238,20 +261,23 @@ export function createEditorGenbar(host, {state, t, actions, text = ''}) {
             if (state.rangeText === null) state.setRangeText(input.value);
             else if (input.value !== state.rangeText) input.value = state.rangeText;
         }
-        if (event.type === 'selection' && state.selection?.kind === 'clip') {
-            const selected = state.record.tracks.flatMap(track => track.clips).find(clip => state.selection.ids.includes(clip.id) && clip.pending);
-            // A part with no description of its own keeps what is typed, as a new range does.
+        if (event.type === 'selection') {
+            commit(); bind();
+            // A part being made shows the description it is made with.
+            const selected = !bound && state.selection?.kind === 'clip' && state.record.tracks.flatMap(track => track.clips).find(clip => state.selection.ids.includes(clip.id) && clip.pending);
             if (selected?.text) input.value = selected.text;
         }
+        // An undo, or a description written elsewhere, shows unless something not yet written is in the box.
+        if (event.type === 'record' && !committing && !dirty && (bound || actions.partText?.(state.selection))) bind();
         if (event.type === 'selection' || event.type === 'record') render();
     });
     render();
-    return {element: host, say, downloadFailure,
+    return {element: host, say, downloadFailure, commit,
         service(value) {
             service = value;
             if (!value && note.contains(retryService)) { retryService.remove(); note.hidden = true; }
             showService();
-        }, getText() { expand.commit(); return input.value; }, update(value) { status = value; render(); }, preview(selection) { previewSelection = selection; render(); }, setText(value) { input.value = value || ''; state.setRangeText(input.value); render(); },
+        }, getText() { expand.commit(); return input.value; }, update(value) { status = value; render(); }, preview(selection) { previewSelection = selection; render(); }, setText(value) { input.value = value || ''; state.setRangeText(input.value); if (bound && input.value !== bound.text) { dirty = true; written = input.value; } render(); },
         dispose() { disposed = true; ++serial; clearTimeout(noteTimer); clearTimeout(refNoticeTimer); unsubscribe(); resize?.disconnect(); expand.dispose(); references?.dispose(); assets?.dispose(); }};
 }
 

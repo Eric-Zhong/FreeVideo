@@ -392,6 +392,22 @@ export function openEditor({api, app, from = null, panel = {}, components: given
     const generating = clip => ['queued', 'running'].includes(clip?.pending);
     const isHeld = id => held.some(entry => entry.ids.includes(id));
     const partBefore = start => state.record.tracks[0].clips.find(clip => clip.frames > 0 && clip.start + clip.frames === start);
+    // A planned part whose description is still the user's to write: not started, not being sent.
+    const editablePart = clip => !!clip && !clip.source && clip.pending === 'draft' && !clip.job && !sending.has(clip.id);
+    const attached = (clip, before) => !!before && before.start + before.frames === clip.start && model.continuesBefore(state.record, clip.id);
+    // The planned parts Generate makes from a choice of planned parts: with the parts before them that they
+    // continue and that are not started yet, as one video; a part whose earlier part is not started would
+    // otherwise start a new one.
+    function partRun(selection) {
+        const free = clip => editablePart(clip) && !isHeld(clip.id);
+        const clips = selectionClips(selection).sort((a, b) => a.start - b.start);
+        if (!clips.length || !clips.every(free)) return null;
+        if (!clips.every((clip, i) => !i || attached(clip, clips[i - 1]))) return clips;
+        const run = [...clips];
+        for (let before; attached(run[0], before = partBefore(run[0].start)) && free(before);) run.unshift(before);
+        return run;
+    }
+    const clipChoice = clips => ({kind: 'clip', ids: clips.flatMap(clip => clip.link ? [clip.id, clip.link] : [clip.id])});
     function busySelection(selection) {
         const range = selectionRange(selection); if (!range) return false;
         if ([...sendingRanges].some(other => overlaps(other, range))) return true;
@@ -438,13 +454,13 @@ export function openEditor({api, app, from = null, panel = {}, components: given
         progress.set(id, value); tracks?.setProgress(id, value);
     } };
     const queuedReady = () => t('Queued. It starts once generation is ready.', '已排队，准备好后自动开始。');
-    function hold(selection, text, job = null) {
-        const range = selectionRange(selection), selectedIds = selectionClips(selection).map(clip => clip.id), shown = selection === state.selection;
+    function hold(selection, text, job = null, {texts = null, shown = selection === state.selection} = {}) {
+        const range = selectionRange(selection), selectedIds = selectionClips(selection).map(clip => clip.id);
         let ids = [];
         if (job) ids = selectedIds;
         else state.apply(t('Generate', '生成'), record => {
             const selected = selectedIds.map(id => model.find(record, id)).filter(Boolean), planned = selected.length && selected.every(clip => !clip.source && clip.pending && !generating(clip));
-            const next = planned ? model.startAttempt(record, selected.map(clip => clip.id), text) : model.planRange(record, {...range, target: 'both', text, maxSeconds: capability.maxSeconds, maxFollowSeconds: capability.maxFollowSeconds});
+            const next = planned ? model.startAttempt(record, selected.map(clip => clip.id), texts ?? text) : model.planRange(record, {...range, target: 'both', text, maxSeconds: capability.maxSeconds, maxFollowSeconds: capability.maxFollowSeconds});
             ids = next.tracks[0].clips.filter(clip => clip.start >= range.start && clip.start < range.start + range.frames && clip.pending && !generating(clip)).map(clip => clip.id);
             return next;
         }, {checkpoint: true});
@@ -471,7 +487,9 @@ export function openEditor({api, app, from = null, panel = {}, components: given
                 const selection = {kind: 'clip', ids: clips.map(clip => clip.id)}, before = partBefore(Math.min(...clips.map(clip => clip.start)));
                 held.shift(); markHeld(entry.ids, false); rememberView();
                 if (before && !before.source && before.pending && !before.job) { genbar?.say(t('The part before did not finish, so this one did not start.', '上一段没有完成，这一段没有开始。')); continue; }
-                try { await actions.generate({text: entry.text, selection}); }
+                // Each part goes with its own description, as written while it waited.
+                const texts = Object.fromEntries(clips.map(clip => [clip.id, clip.text.trim() || entry.text]));
+                try { await actions.generate({text: texts[clips[0].id], texts, selection}); }
                 catch (value) { const reason = error(value, 'generate'); if (reason && !['chain_too_long', 'chain_part_too_short'].includes(reason.reason)) genbar?.say(reason.say); }
             }
         } finally { startingHeld = false; }
@@ -774,6 +792,8 @@ export function openEditor({api, app, from = null, panel = {}, components: given
         generationWaiting: () => generationAsked && !store.generationAvailable,
         importFiles: (files, options) => library?.importFiles(files, options),
         gestureStart({selectionGesture = false} = {}) {
+            // A description being typed is written to its part before the gesture, which a later edit would stop.
+            genbar?.commit();
             pointerEditing = true;
             if (selectionGesture && !menu.hidden) { menu.hidden = true; updateTransport(); }
         },
@@ -834,13 +854,25 @@ export function openEditor({api, app, from = null, panel = {}, components: given
         canGenerate(text, selection = state.selection) {
             return store.generationAvailable && actions.supportedSelection(selection) && (!!text.trim() || !actions.needsText(selection));
         },
+        // The description the box shows for a choice of planned parts, and the parts it is written to; null for
+        // any other choice.
+        partText(selection = state.selection) {
+            const clips = selectionClips(selection).sort((a, b) => a.start - b.start);
+            return clips.length && clips.every(editablePart) ? {ids: clips.map(clip => clip.id), text: clips[0].text} : null;
+        },
+        describeParts(ids, text) {
+            if (!ids.every(id => editablePart(model.find(state.record, id)))) return false;
+            try { state.apply(t('Edit description', '修改说明'), record => model.describePlanned(record, ids, text)); return true; }
+            catch (value) { if (value instanceof model.EditError) return false; throw value; }
+        },
         needsText(selection = state.selection) {
             const range = selectionRange(selection); if (!range) return true;
-            // Only a part pulled out of a finished one needs no description: it continues that one with the
-            // description it took over. A finished video without one (an exported edit) still needs it.
+            // Only a part pulled out of a finished one needs no description: it continues that one, with that one's
+            // description when it has none of its own. A finished video without one (an exported edit) still needs it.
             const head = state.record.tracks[0].clips.find(clip => clip.start === range.start);
-            const before = !!head && !!head.text?.trim() && model.continuesBefore(state.record, head.id) && state.record.tracks[0].clips.some(clip =>
-                clip.start + clip.frames === range.start && clip.source && clip.extend && clip.in + clip.frames === clip.length);
+            const before = !!head && model.continuesBefore(state.record, head.id) && state.record.tracks[0].clips.some(clip =>
+                clip.start + clip.frames === range.start && clip.source && clip.extend && clip.in + clip.frames === clip.length
+                && !!(head.text?.trim() || clip.text?.trim()));
             return !before;
         },
         // Only where earlier footage is continued: a part right after an extendable clip, or a range split into several parts.
@@ -864,16 +896,17 @@ export function openEditor({api, app, from = null, panel = {}, components: given
         }},
         previewRange: selection => genbar?.preview(selection),
         async estimate(selection) {
-            const range = selectionRange(selection); if (!range) return null;
+            const run = partRun(selection), range = selectionRange(run ? clipChoice(run) : selection); if (!range) return null;
             let seconds = 0;
             for (const count of model.rangeParts(state.record, {...range, ...capability})) { const value = capability.estimate(count); if (value == null) return null; seconds += value; }
             return seconds;
         },
-        async generate({target = 'both', text = '', label = t('Generate', '生成'), selection = state.selection} = {}) {
+        // texts: a description for each planned part, by the part's picture; otherwise text is every part's.
+        async generate({target = 'both', text = '', texts = null, label = t('Generate', '生成'), selection = state.selection, shown = selection === state.selection} = {}) {
             if (target !== 'both' || !actions.supportedSelection(selection)) throw new model.EditError('unsupported');
             if (!actions.canGenerate(text, selection)) throw new model.EditError('text');
             submissionFailure = null; genbar?.update(null);
-            const shown = selection === state.selection;
+            const chosen = state.selection;
             generationBusy = true; updateTop(); updateTransport();
             generationDone = new Promise(resolve => { finishGeneration = resolve; });
             let ids = [], prepared = null, beforeAttempt = null, priorSelection = null, priorText = null, submittedSelection = null, frozen = null;
@@ -884,7 +917,7 @@ export function openEditor({api, app, from = null, panel = {}, components: given
                 beforeAttempt = state.record; priorSelection = state.selection; priorText = state.rangeText;
                 state.apply(label, record => {
                     const selected = selectedIds.map(id => model.find(record, id)).filter(Boolean), alreadyPlanned = selected.length && selected.every(clip => !clip.source && clip.pending && !['queued', 'running'].includes(clip.pending));
-                    let next = alreadyPlanned ? model.startAttempt(record, selected.map(clip => clip.id), text) : model.planRange(record, {...range, target: 'both', text, maxSeconds: capability.maxSeconds, maxFollowSeconds: capability.maxFollowSeconds});
+                    let next = alreadyPlanned ? model.startAttempt(record, selected.map(clip => clip.id), texts ?? text) : model.planRange(record, {...range, target: 'both', text, maxSeconds: capability.maxSeconds, maxFollowSeconds: capability.maxFollowSeconds});
                     if (!record.tracks[0].clips.length && text.trim()) next = model.rename(next, model.truncateText(text.trim(), 40));
                     ids = next.tracks[0].clips.filter(clip => clip.start >= range.start && clip.start < range.start + range.frames && clip.pending && !['queued', 'running'].includes(clip.pending)).map(clip => clip.id);
                     return model.prepare(next, ids);
@@ -893,9 +926,9 @@ export function openEditor({api, app, from = null, panel = {}, components: given
                 prepared = state.record;
                 // Only a press on what is still chosen moves the choice; a part started in the background
                 // leaves whatever the user has moved on to, and what they typed there.
-                submittedSelection = shown && state.selection === selection ? state.select({kind: 'clip', ids}) : state.selection; await completeSources();
+                submittedSelection = shown && state.selection === chosen ? state.select({kind: 'clip', ids}) : state.selection; await completeSources();
                 const paths = Object.fromEntries([...store.sources].map(([key, value]) => [key, value.path]));
-                const request = model.generationRequest(prepared, ids, {text, paths, queue: true});
+                const request = model.generationRequest(prepared, ids, {text: texts ? undefined : text, paths, queue: true});
                 const beforeKeys = model.generationBefore(prepared, ids), sizes = new Map(store.sources);
                 for (const key of beforeKeys.filter(key => key?.startsWith('chain:'))) {
                     const job = await store.chain(key.split(':')[1]);
@@ -973,12 +1006,31 @@ export function openEditor({api, app, from = null, panel = {}, components: given
                 if (!moved) return {say: t('Choose an empty spot on the timeline.', '请在时间线上选一段空白。')};
                 selection = state.select(moved); said = t('Moved to the next empty spot.', '已挪到后面的空位。'); genbar?.say(said);
             }
-            let used = null;
-            if (!text.trim() && actions.needsText(selection)) {
+            let used = null, texts = null, shown = selection === state.selection;
+            const before = t('Used the description of the part before.', '沿用了上一段的描述。'), latest = t('Used the latest description.', '沿用了最近一次的描述。');
+            let run = partRun(selection);
+            if (run) {
+                // What is in the box is the chosen parts' description; each part goes with its own, and one with
+                // none uses the one before it.
+                const chosen = selectionClips(selection).sort((a, b) => a.start - b.start);
+                if (text.trim() && text.trim() !== chosen[0].text && actions.describeParts(chosen.map(clip => clip.id), text)) run = partRun(selection);
+                texts = {};
+                for (const [i, clip] of run.entries()) {
+                    let value = clip.text.trim();
+                    if (!value && i && attached(clip, run[i - 1])) { value = texts[run[i - 1].id]; used ??= before; }
+                    else if (!value) {
+                        const found = nearbyText(clip.start);
+                        if (!found) return {say: [said, t('Write a description first.', '先写一句描述。')].filter(Boolean).join(' '), focus: true};
+                        value = found.text; used ??= found.before ? before : latest;
+                    }
+                    texts[clip.id] = value;
+                }
+                text = texts[chosen[0].id];
+                selection = clipChoice(run);
+            } else if (!text.trim() && actions.needsText(selection)) {
                 const found = nearbyText(selectionRange(selection).start);
                 if (!found) return {say: [said, t('Write a description first.', '先写一句描述。')].filter(Boolean).join(' '), focus: true};
-                text = found.text; used = found.before ? t('Used the description of the part before.', '沿用了上一段的描述。')
-                    : t('Used the latest description.', '沿用了最近一次的描述。');
+                text = found.text; used = found.before ? before : latest;
                 state.setRangeText(text); genbar?.setText(text);
             } else if (!text.trim()) {
                 // The box was emptied; the part keeps the description it took over, as an empty one cannot be generated.
@@ -987,12 +1039,12 @@ export function openEditor({api, app, from = null, panel = {}, components: given
             }
             const waiting = waitingFor(selection);
             if (waiting) {
-                hold(selection, text);
+                hold(selection, texts ? texts[run[0].id] : text, null, {texts, shown});
                 return {text, say: [said, used, waiting === 'ready' ? queuedReady()
                     : t('Queued. It starts after the previous part finishes.', '已排队，上一段完成后自动开始。')].filter(Boolean).join(' '), queued: true};
             }
             const busyBefore = jobActive();
-            await actions.generate({text, selection});
+            await actions.generate({text: texts ? texts[run[0].id] : text, texts, selection, shown});
             return {text, say: [said, used, busyBefore ? t('Queued. It starts after the part now generating.', '已排队，正在生成的那段完成后自动开始。') : null].filter(Boolean).join(' ') || null, queued: busyBefore};
         },
         selectionRunning: () => busySelection(state.selection),

@@ -1,25 +1,42 @@
 {
   "schema": 1,
-  "product_version": "0.4.22",
+  "product_version": "0.4.23",
   "en": {
-    "summary": "Autopilot chat can attach reference pictures; the launcher and the editor explain more precisely why a step failed; Mac setup no longer needs Git installed.",
+    "summary": "Each part planned in the editor can have its own description; low-memory generations explain why they are slower.",
     "changes": [
-      "Autopilot: a chat message can carry reference pictures, added with the Picture button, by pasting or by dragging, up to 4 per message and 10 MB each. A picture that fails to upload stays in place and can be clicked to retry.",
-      "Launcher and setup: choosing a folder inside a portable ComfyUI, such as its python_embeded folder, now names the portable folder to select. Mac setup downloads its own Git when the system has none. A failed Git download no longer leaves an incomplete folder behind, and leftovers from earlier attempts are removed. On Windows, when security software briefly holds the newly downloaded installer tool, setup retries for a few seconds instead of stopping with \"This folder is not writable\".",
-      "Edit: a failed save now states its cause, and a lost connection is reported as a lost connection. Edit also works on an https page served through a proxy that terminates the secure connection, as on some cloud GPU hosts.",
-      "Diagnostic reports: the page check states why an open creative panel cannot be seen. When a request is refused for lack of memory on Windows, the report records how much of the used memory FreeVideo itself holds."
+      "Generation: When a generation runs in low-memory mode, the progress view says why it is slower.",
+      "Editor: Each part of a video planned in the editor can now have its own description, and a continued part uses exactly what you write for it. The highlight on characters mentioned with @ in the prompt box updates as soon as a rewritten prompt is filled in."
     ]
   },
   "zh": {
-    "summary": "AI 全自动聊天可以附参考图；启动器和编辑器更准确地说明失败原因；Mac 安装不再需要预先装好 Git。",
+    "summary": "剪辑里规划的每一段可以单独写描述；低显存模式下的生成会说明较慢的原因。",
     "changes": [
-      "AI 全自动：聊天消息可以附参考图，用“图片”按钮、粘贴或拖入添加，每条最多 4 张、每张不超过 10 MB。上传失败的图片会保留，点击即可重试。",
-      "启动器和安装：选中便携版 ComfyUI 内部的文件夹（例如 python_embeded）时，提示会写出应选择的便携版文件夹。Mac 系统没有 Git 时，安装会自行下载 Git。Git 下载失败后不再留下不完整的文件夹，以前残留的也会清除。Windows 上安全软件短暂占用刚下载的安装工具时，安装会重试数秒，不再以“此文件夹不可写”停止。",
-      "编辑：保存失败时会写明原因，连接断开时显示为连接已断开。通过代理终止安全连接的 https 页面（部分云端显卡主机即是如此）上也可以正常使用编辑。",
-      "诊断报告：页面检查会写明创作面板已打开却看不到的原因。Windows 上请求因内存不足被拒绝时，报告会写出已用内存中 FreeVideo 自己占用多少。"
+      "生成：低显存模式下，进度区会说明这次生成较慢的原因。",
+      "剪辑视图：剪辑里规划的每一段现在都可以单独写描述，接着生成的一段会用为它写的描述。改写后的提示词填回时，@人物 高亮立即刷新。"
     ]
   },
   "history": [
+    {
+      "product_version": "0.4.22",
+      "en": {
+        "summary": "Autopilot chat can attach reference pictures; the launcher and the editor explain more precisely why a step failed; Mac setup no longer needs Git installed.",
+        "changes": [
+          "Autopilot: a chat message can carry reference pictures, added with the Picture button, by pasting or by dragging, up to 4 per message and 10 MB each. A picture that fails to upload stays in place and can be clicked to retry.",
+          "Launcher and setup: choosing a folder inside a portable ComfyUI, such as its python_embeded folder, now names the portable folder to select. Mac setup downloads its own Git when the system has none. A failed Git download no longer leaves an incomplete folder behind, and leftovers from earlier attempts are removed. On Windows, when security software briefly holds the newly downloaded installer tool, setup retries for a few seconds instead of stopping with \"This folder is not writable\".",
+          "Edit: a failed save now states its cause, and a lost connection is reported as a lost connection. Edit also works on an https page served through a proxy that terminates the secure connection, as on some cloud GPU hosts.",
+          "Diagnostic reports: the page check states why an open creative panel cannot be seen. When a request is refused for lack of memory on Windows, the report records how much of the used memory FreeVideo itself holds."
+        ]
+      },
+      "zh": {
+        "summary": "AI 全自动聊天可以附参考图；启动器和编辑器更准确地说明失败原因；Mac 安装不再需要预先装好 Git。",
+        "changes": [
+          "AI 全自动：聊天消息可以附参考图，用“图片”按钮、粘贴或拖入添加，每条最多 4 张、每张不超过 10 MB。上传失败的图片会保留，点击即可重试。",
+          "启动器和安装：选中便携版 ComfyUI 内部的文件夹（例如 python_embeded）时，提示会写出应选择的便携版文件夹。Mac 系统没有 Git 时，安装会自行下载 Git。Git 下载失败后不再留下不完整的文件夹，以前残留的也会清除。Windows 上安全软件短暂占用刚下载的安装工具时，安装会重试数秒，不再以“此文件夹不可写”停止。",
+          "编辑：保存失败时会写明原因，连接断开时显示为连接已断开。通过代理终止安全连接的 https 页面（部分云端显卡主机即是如此）上也可以正常使用编辑。",
+          "诊断报告：页面检查会写明创作面板已打开却看不到的原因。Windows 上请求因内存不足被拒绝时，报告会写出已用内存中 FreeVideo 自己占用多少。"
+        ]
+      }
+    },
     {
       "product_version": "0.4.21",
       "en": {
@@ -224,39 +241,6 @@
           "视频生成：“精细”档生成更快。8 GB 显存的显卡上，以前因显存差一点而被拒绝的 1920×1088 视频，现在可以生成。改动视频参考的前期步数设置后，会生成新的结果，不再沿用之前的结果。",
           "LoRA：为 Wan 2.x 训练的 LoRA 选进 int8 模型时，会说明这是给 Wan 2.x 训练的 LoRA，不再只说无法使用。",
           "Linux：内存较小的电脑接着再生成一次时，不再在采样快结束时内存不足。6 GB 显存的显卡选“极致”时，不再要等好几个小时。"
-        ]
-      }
-    },
-    {
-      "product_version": "0.4.14",
-      "en": {
-        "summary": "Max is faster, a picture can now be changed only inside a region you select, agents can import their own clips into the timeline, and long videos can take more requests into the queue while they generate.",
-        "changes": [
-          "Quality levels: Max now uses 20 steps with a guarded step cache and finishes sooner; High uses 16 steps with the step cache. The level names stay the same.",
-          "Picture editing: when changing a picture, drag a box, click an object, or draw a closed outline to select a region. Shift adds to the selection and Alt removes from it. Only the selected region changes, and everything outside it stays exactly the same. Click selection downloads a 184 MB model from ModelScope the first time it is used.",
-          "Studio: while a long or multi-part video is generating, the button stays available as \"Add to queue\". Up to five requests can wait, and each starts when the current video finishes or is stopped.",
-          "Agent: agents can import clips they rendered through HTTP, MCP and the command line, place them on the timeline by frame, and export. Before an agent is connected, the autopilot page says what connecting one is for.",
-          "Editing view: a reference picture that cannot be read is flagged right away so another one can be chosen.",
-          "Upgrade: when an old FreeVideo tab is replaced, two-pass sampling, first- and second-pass steps, the step cache and the upscale factor are carried over.",
-          "Prompt enhancement: after the model folder is copied, an offline package is unpacked, or antivirus software scans the files, FreeVideo no longer asks to download 8.9 GB again when the files are unchanged. It now also works on 6 GB graphics cards, finishing in under a minute instead of timing out.",
-          "Chinese interface: browser translation no longer changes FreeVideo's own labels, so the size menu keeps showing MP.",
-          "Feedback: feedback sent for a failed generation now includes the engine's error message.",
-          "Install: the Windows library checks also handle files in deeply nested folders."
-        ]
-      },
-      "zh": {
-        "summary": "极致档更快；改图时可以只改选中的区域；Agent 可以把自己渲染的片段导入时间线；长视频生成中可以继续加入队列。",
-        "changes": [
-          "质量档位：极致档改为 20 步加带检查的步缓存，更快完成；精细档改为 16 步加步缓存。档位名称不变。",
-          "改图：改一张图时，可以拖框、点选物体或画闭合曲线来选区；按住 Shift 添加，按住 Alt 减去。只改选区里的内容，选区外完全不变。点选第一次使用时从魔搭下载 184 MB 的模型。",
-          "创作面板：长视频或分段视频生成中，按钮保持可用，显示“加入队列”。最多排 5 条，当前视频完成或停止后自动开始下一条。",
-          "Agent：Agent 可以通过 HTTP、MCP 和命令行导入自己渲染的片段，按帧放上时间线并导出。未连接时，自动页说明连上之后能做什么。",
-          "剪辑视图：参考图读不出来时会当场提示，可以换一张。",
-          "升级：替换旧版本的 FreeVideo 标签页时，二次采样、第一遍和第二遍步数、步缓存和放大倍数都会带过来。",
-          "提示词增强：复制模型文件夹、解压离线包或被杀毒软件扫描之后，只要文件内容没变，就不再要求重新下载 8.9 GB。6 GB 显卡上现在也能用，一分钟内完成，不再超时。",
-          "中文界面：浏览器翻译不再改动 FreeVideo 自己的文字，尺寸菜单保持显示 MP。",
-          "反馈：为失败的生成发送反馈时，会附上引擎给出的报错信息。",
-          "安装：Windows 上的库文件检查也支持层级很深的文件夹。"
         ]
       }
     }
